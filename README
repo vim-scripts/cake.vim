@@ -1,0 +1,39 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=3589
+
+cake.vim is for easy jumping between Controller, Model and View files when developing in CakePHP. 
+
+Requirements:
+- Vim ver.7.0 or heigher 
+- CakePHP ver.1.3 or heigher
+
+Easy to use:
+
+At the first, specified the root directory of your CakePHP.
+
+:Cakephp /path/to/cakephp_root/
+
+
+When you run this command, it will be cached controller and
+model name internally.
+If you write the following key-mappings in your .vimrc, it will
+perform automatically at startup.
+
+    let g:cakephp_auto_set_project = 1
+    let g:cakephp_root = "/path/to/cakephp_root/"
+
+
+Edit the specified or current controller.
+:Ccontroller hogehoges
+
+
+Edit the specified controller's view.
+when current buffer is controller.
+:Cview index
+
+
+Edit the specified or current view( and use theme name).
+:Cview index mytheme
+
+
+Edit the specified or current model.
+:Cmodel hogehoge
