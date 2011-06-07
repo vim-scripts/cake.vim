@@ -8,9 +8,9 @@ Requirements:
 
 Easy to use:
 
-At the first, specified the root directory of your CakePHP.
+At the first, specified the app directory of your CakePHP.
 
-:Cakephp /path/to/cakephp_root/
+:Cakephp /path/to/cakephp_app/
 
 
 When you run this command, it will be cached controller and
@@ -19,12 +19,11 @@ If you write the following key-mappings in your .vimrc, it will
 perform automatically at startup.
 
     let g:cakephp_auto_set_project = 1
-    let g:cakephp_root = "/path/to/cakephp_root/"
+    let g:cakephp_app = "/path/to/cakephp_app/"
 
 
 Edit the specified or current controller.
 :Ccontroller hogehoges
-
 
 Edit the specified controller's view.
 when current buffer is controller.
@@ -37,3 +36,22 @@ Edit the specified or current view( and use theme name).
 
 Edit the specified or current model.
 :Cmodel hogehoge
+
+
+Edit the specified config.
+:Ctask hogehoge
+
+Edit the specified component.
+:Ccomponent hogehoge
+
+
+Edit the specified shell.
+:Cshell hogehoge
+
+
+Edit the specified task.
+:Ctask hogehoge
+
+
+Edit the debug.log.
+:Clog debug
