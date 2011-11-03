@@ -4,7 +4,7 @@ cake.vim is for easy jumping between Controller, Model and View files when devel
 
 Requirements:
 - Vim ver.7.0 or heigher 
-- CakePHP ver.1.3 or heigher
+- CakePHP ver.1.3.x
 
 Easy to use:
 
@@ -24,11 +24,13 @@ perform automatically at startup.
 
 Edit the specified or current controller.
 :Ccontroller hogehoges
+It guess the Controller when current buffer is View or Model.
+:Controller
+
 
 Edit the specified controller's view.
 when current buffer is controller.
 :Cview index
-
 
 Edit the specified or current view( and use theme name).
 :Cview index mytheme
@@ -36,13 +38,24 @@ Edit the specified or current view( and use theme name).
 
 Edit the specified or current model.
 :Cmodel hogehoge
+It guess the Model when current buffer is Controller.
+:Cmodel
 
 
 Edit the specified config.
-:Ctask hogehoge
+:Cconfig hogehoge
+
 
 Edit the specified component.
 :Ccomponent hogehoge
+
+
+Edit the specified behavior.
+:Cbehavior hogehoge
+
+
+Edit the specified helper.
+:Chelper hogehoge
 
 
 Edit the specified shell.
@@ -51,6 +64,24 @@ Edit the specified shell.
 
 Edit the specified task.
 :Ctask hogehoge
+
+
+Edit the specified test case.
+:Ctestmodel hoge
+:Ctestbehavior hoge
+:Ctestcomponent hoge
+:Ctestcontroller hoge
+:Ctesthelper hoge
+
+when current buffer is Model or Behavior or Component,
+ or Controller or Helper or Fixture.
+:Ctest
+
+
+Edit the specified fixture.
+:Cfixture hoge
+It guess the Fixture when current buffer is Model.
+:Cfixture
 
 
 Edit the debug.log.
