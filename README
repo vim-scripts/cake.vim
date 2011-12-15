@@ -2,6 +2,9 @@ This is a mirror of http://www.vim.org/scripts/script.php?script_id=3589
 
 cake.vim is for easy jumping between Controller, Model and View files when developing in CakePHP. 
 
+The latest version is in github. 
+https://github.com/violetyk/cake.vim
+
 Requirements:
 - Vim ver.7.0 or heigher 
 - CakePHP ver.1.3 or ver.2.0

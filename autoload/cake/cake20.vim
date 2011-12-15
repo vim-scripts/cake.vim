@@ -30,6 +30,10 @@ function! cake#cake20#factory(path_app)
         \ 'fixtures'        : a:path_app . "Test/Fixture/",
         \}
 
+  let self.vars =  {
+        \ 'layout_dir'      : 'Layouts/',
+        \ 'element_dir'     : 'Elements/',
+        \}
 
   " Functions: self.get_dictionary()
   " [object_name : path]
@@ -66,7 +70,7 @@ function! cake#cake20#factory(path_app)
 
       let s = matchend(line, "\s*function\s*.")
       let e = match(line, "(")
-      let func_name = strpart(line, s, e-s)
+      let func_name = util#strtrim(strpart(line, s, e-s))
 
       " Callback functions are not eligible.
       if func_name !~ "^_" && func_name !=? "beforeFilter" && func_name !=? "beforeRender" && func_name !=? "afterFilter"
@@ -257,6 +261,18 @@ function! cake#cake20#factory(path_app)
   endfunction "}}}
   function! self.is_testhelper(path) "{{{
     if filereadable(a:path) && match(a:path, self.paths.testhelpers) != -1 && match(a:path, "HelperTest\.php$") != -1
+      return 1
+    endif
+    return 0
+  endfunction "}}}
+  function! self.is_shell(path) "{{{
+    if filereadable(a:path) && match(a:path, self.paths.shells) != -1 && match(a:path, "Shell\.php$") != -1
+      return 1
+    endif
+    return 0
+  endfunction "}}}
+  function! self.is_task(path) "{{{
+    if filereadable(a:path) && match(a:path, self.paths.tasks) != -1 && match(a:path, "Task\.php$") != -1
       return 1
     endif
     return 0
