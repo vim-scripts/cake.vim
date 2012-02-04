@@ -951,31 +951,31 @@ function! cake#factory(path_app)
     if self.is_view(path)
       " let name = matchstr(l_word, '\(["'']\)\zs[0-9A-Za-z/_.]\+\ze\(["'']\)' )
       " View / $this->element('xxx') -> element
-      let element_name = matchstr(line, '\(\$this->element(\s*["'']\)\zs[0-9A-Za-z/_.]\+\ze\(["'']\)' )
+      let element_name = matchstr(line, '\(\$this->element(\s*["'']\)\zs[0-9A-Za-z/_.-]\+\ze\(["'']\)' )
       if strlen(element_name) > 0
         call self.smart_jump_element(element_name, option)
         return
       endif
       " View / $this->Html->css('xxx') -> css
-      let stylesheet_name = matchstr(line, '\(\$this->Html->css(\s*["'']\)\zs[0-9A-Za-z/_.]\+\ze\(["'']\)' )
+      let stylesheet_name = matchstr(line, '\(\$this->Html->css(\s*["'']\)\zs[0-9A-Za-z/_.-]\+\ze\(["'']\)' )
       if strlen(stylesheet_name) > 0
         call self.smart_jump_stylesheet(stylesheet_name, option)
         return
       endif
       " View / $html->css('xxx') -> css
-      let stylesheet_name = matchstr(line, '\(\$html->css(\s*["'']\)\zs[0-9A-Za-z/_.]\+\ze\(["'']\)' )
+      let stylesheet_name = matchstr(line, '\(\$html->css(\s*["'']\)\zs[0-9A-Za-z/_.-]\+\ze\(["'']\)' )
       if strlen(stylesheet_name) > 0
         call self.smart_jump_stylesheet(stylesheet_name, option)
         return
       endif
       " View / $this->Html->script('xxx') -> script
-      let script_name = matchstr(line, '\(\$this->Html->script(\s*["'']\)\zs[0-9A-Za-z/_.]\+\ze\(["'']\)' )
+      let script_name = matchstr(line, '\(\$this->Html->script(\s*["'']\)\zs[0-9A-Za-z/_.-]\+\ze\(["'']\)' )
       if strlen(script_name) > 0
         call self.smart_jump_script(script_name, option)
         return
       endif
       " View / $html->script('xxx') -> script
-      let script_name = matchstr(line, '\(\$html->script(\s*["'']\)\zs[0-9A-Za-z/_.]\+\ze\(["'']\)' )
+      let script_name = matchstr(line, '\(\$html->script(\s*["'']\)\zs[0-9A-Za-z/_.-]\+\ze\(["'']\)' )
       if strlen(script_name) > 0
         call self.smart_jump_script(script_name, option)
         return
@@ -1389,6 +1389,66 @@ function! cake#factory(path_app)
     endif
 
     call cake#util#open_tail_log_window(g:cakephp_log[a:log_name], g:cakephp_log_window_size)
+  endfunction "}}}
+  function! self.in_theme(view_path) "{{{
+    if match(a:view_path, self.paths.themes) != -1
+      return 1
+    endif
+    return 0
+  endfunction "}}}
+  function! self.get_viewtheme(view_path) " {{{
+    let theme = ''
+    " View in now a theme?
+    if self.in_theme(a:view_path)
+      let theme = cake#util#get_topdir(a:view_path[strlen(self.paths.themes):])
+    endif
+    return theme
+  endfunction "}}}
+  function! self.clip_element(bang, ...) range "{{{
+    let range = a:firstline . ',' . a:lastline
+    let args = split(a:1, '[^0-9A-Za-z_/\-\\]\+')
+    let element_name = get(args, 0)
+    let view_path = expand("%:p")
+    let theme = ''
+    if len(args) > 1
+      let theme = get(args, 1)
+    else
+      let theme = self.get_viewtheme(view_path)
+    endif
+
+    if theme == ''
+      " default
+      let output_file = self.paths.views . self.vars.element_dir . element_name . '.ctp'
+    else
+      " using theme
+      let output_file = self.paths.themes . theme . '/' . self.vars.element_dir . element_name . '.ctp'
+    endif
+
+
+    if filereadable(output_file) && !a:bang
+      call cake#util#echo_warning(output_file . ' already exists.(add ! to override)')
+      return
+    endif
+    if !isdirectory(fnamemodify(output_file, ':h'))
+      if a:bang
+        call mkdir(fnamemodify(output_file, ':h'), 'p')
+      else
+        call cake#util#echo_warning(fnamemodify(output_file, ':h') . ' is not such directory.(add ! to make directory.)')
+        return
+      endif
+    endif
+
+    let tmp = @@
+    silent exec range . 'yank'
+    let element = @@
+    let @@ = tmp
+
+    let replace_text = "<?php echo $this->element('" . element_name . "'); ?>"
+    silent exec "normal! :". range . "change!\<CR>" . replace_text . "\<CR>.\<CR>"
+    call writefile(split(element, "\n", 1), output_file, 'b')
+
+    echo 'Save Element: '. output_file
+
   endfunction "}}}
   " ============================================================
 
