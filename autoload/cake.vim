@@ -914,20 +914,20 @@ function! cake#factory(path_app)
         return
       endif
       " Controller / $this->render('xxx') -> View
-      let view_name = matchstr(line, '\(\$this->render(\s*["'']\)\zs\w\+\ze\(["'']\s*)\)')
+      let view_name = matchstr(line, '\(\$this->render(\s*["'']\)\zs[0-9A-Za-z/_.-]\+\ze\(["'']\s*)\)')
       if strlen(view_name) > 0
         call self.smart_jump_view(controller_name, view_name, option)
         return
       endif
 
       " Controller / var $layout = 'xxx'; -> layout
-      let layout_name = matchstr(line, '\(var\s\+\$layout\s*=\s*["'']\)\zs\w\+\ze\(["''];\)' )
+      let layout_name = matchstr(line, '\(var\s\+\$layout\s*=\s*["'']\)\zs[0-9A-Za-z/_.-]\+\ze\(["''];\)' )
       if strlen(layout_name) > 0
         call self.smart_jump_layout(layout_name, option)
         return
       endif
       " Controller / $this->layout = 'xxx'; -> layout
-      let layout_name = matchstr(line, '\(\$this->layout\s*=\s*["'']\)\zs\w\+\ze\(["''];\)' )
+      let layout_name = matchstr(line, '\(\$this->layout\s*=\s*["'']\)\zs[0-9A-Za-z/_.-]\+\ze\(["''];\)' )
       if strlen(layout_name) > 0
         call self.smart_jump_layout(layout_name, option)
         return
@@ -1313,19 +1313,32 @@ function! cake#factory(path_app)
   function! self.smart_jump_script(script_name, option) "{{{
     let scripts = []
 
-    " default
-    let script_path = self.paths.app . 'webroot/js/' . a:script_name . '.js'
-    if filereadable(script_path)
-      call add(scripts , script_path)
+    if match(a:script_name, '/') > 0
+      let script_dir = 'webroot/js/' . a:script_name[:strridx(a:script_name, '/')]
+      let script_name = a:script_name[strridx(a:script_name, '/')+1:]
+    else
+      let script_dir = 'webroot/js/'
+      let script_name = a:script_name
     endif
 
-    let themes = keys(self.get_themes())
-    for theme_name in themes
-      let script_path = self.paths.themes . theme_name . '/webroot/js/' . a:script_name . '.js'
+
+    " default
+    for script_path in split(globpath(self.paths.app . script_dir, "**/" . script_name . ".js"), "\n")
       if filereadable(script_path)
         call add(scripts, script_path)
       endif
     endfor
+
+    " in themes
+    let themes = keys(self.get_themes())
+    for theme_name in themes
+      for script_path in split(globpath(self.paths.themes . theme_name . '/' . script_dir, "**/" . script_name . ".js"), "\n")
+        if filereadable(script_path)
+          call add(scripts, script_path)
+        endif
+      endfor
+    endfor
+
 
     let i = len(scripts)
     if i == 0
@@ -1356,18 +1369,30 @@ function! cake#factory(path_app)
   function! self.smart_jump_stylesheet(stylesheet_name, option) "{{{
     let stylesheets = []
 
-    " default
-    let stylesheet_path = self.paths.app . 'webroot/css/' . a:stylesheet_name . '.css'
-    if filereadable(stylesheet_path)
-      call add(stylesheets , stylesheet_path)
+    if match(a:stylesheet_name, '/') > 0
+      let stylesheet_dir = 'webroot/css/' . a:stylesheet_name[:strridx(a:stylesheet_name, '/')]
+      let stylesheet_name = a:stylesheet_name[strridx(a:stylesheet_name, '/')+1:]
+    else
+      let stylesheet_dir = 'webroot/css/'
+      let stylesheet_name = a:stylesheet_name
     endif
 
-    let themes = keys(self.get_themes())
-    for theme_name in themes
-      let stylesheet_path = self.paths.themes . theme_name . '/webroot/css/' . a:stylesheet_name . '.css'
+
+    " default
+    for stylesheet_path in split(globpath(self.paths.app . stylesheet_dir, "**/" . stylesheet_name . ".css"), "\n")
       if filereadable(stylesheet_path)
         call add(stylesheets, stylesheet_path)
       endif
+    endfor
+
+    " in themes
+    let themes = keys(self.get_themes())
+    for theme_name in themes
+      for stylesheet_path in split(globpath(self.paths.themes . theme_name . '/' . stylesheet_dir, "**/" . stylesheet_name . ".css"), "\n")
+        if filereadable(stylesheet_path)
+          call add(stylesheets, stylesheet_path)
+        endif
+      endfor
     endfor
 
     let i = len(stylesheets)
@@ -1399,19 +1424,32 @@ function! cake#factory(path_app)
   function! self.smart_jump_element(element_name, option) "{{{
     let elements = []
 
-    " default
-    let element_path = self.paths.views . self.vars.element_dir . a:element_name . '.ctp'
-    if filereadable(element_path)
-      call add(elements , element_path)
+    if match(a:element_name, '/') > 0
+      let element_dir = self.vars.element_dir . a:element_name[:strridx(a:element_name, '/')]
+      let element_name = a:element_name[strridx(a:element_name, '/')+1:]
+    else
+      let element_dir = self.vars.element_dir
+      let element_name = a:element_name
     endif
 
-    let themes = keys(self.get_themes())
-    for theme_name in themes
-      let element_path = self.paths.themes . theme_name . '/' . self.vars.element_dir . a:element_name . '.ctp'
+
+    " default
+    for element_path in split(globpath(self.paths.views . element_dir, "**/" . element_name . ".ctp"), "\n")
       if filereadable(element_path)
         call add(elements, element_path)
       endif
     endfor
+
+    " in themes
+    let themes = keys(self.get_themes())
+    for theme_name in themes
+      for element_path in split(globpath(self.paths.themes . theme_name . '/' . element_dir, "**/" . element_name . ".ctp"), "\n")
+        if filereadable(element_path)
+          call add(elements, element_path)
+        endif
+      endfor
+    endfor
+
 
     let i = len(elements)
     if i == 0
@@ -1442,18 +1480,29 @@ function! cake#factory(path_app)
   function! self.smart_jump_layout(layout_name, option) "{{{
     let layouts = []
 
-    " default
-    let layout_path = self.paths.views . self.vars.layout_dir . a:layout_name . '.ctp'
-    if filereadable(layout_path)
-      call add(layouts, layout_path)
+    if match(a:layout_name, '/') > 0
+      let layout_dir = self.vars.layout_dir . a:layout_name[:strridx(a:layout_name, '/')]
+      let layout_name = a:layout_name[strridx(a:layout_name, '/')+1:]
+    else
+      let layout_dir = self.vars.layout_dir
+      let layout_name = a:layout_name
     endif
 
-    let themes = keys(self.get_themes())
-    for theme_name in themes
-      let layout_path = self.paths.themes . theme_name . '/' . self.vars.layout_dir . a:layout_name . '.ctp'
+    " in default
+    for layout_path in split(globpath(self.paths.views . layout_dir, "**/" . layout_name . ".ctp"), "\n")
       if filereadable(layout_path)
         call add(layouts, layout_path)
       endif
+    endfor
+
+    " in themes
+    let themes = keys(self.get_themes())
+    for theme_name in themes
+      for layout_path in split(globpath(self.paths.themes . theme_name . '/' . layout_dir, "**/" . layout_name . ".ctp"), "\n")
+        if filereadable(layout_path)
+          call add(layouts, layout_path)
+        endif
+      endfor
     endfor
 
     let i = len(layouts)
@@ -1484,13 +1533,22 @@ function! cake#factory(path_app)
   endfunction "}}}
   function! self.smart_jump_view(controller_name, view_name, option) "{{{
     let views = []
+
+    if match(a:view_name, '/') > 0
+      let view_name = a:view_name[strridx(a:view_name, '/')+1:]
+    else
+      let view_name = a:view_name
+    endif
+
     let themes = keys(self.get_themes())
     let themes = insert(themes, '') "no theme
+
     for theme_name in themes
-      let view_path = self.name_to_path_view(a:controller_name, a:view_name, theme_name)
-      if filereadable(view_path)
-        call add(views, view_path)
-      endif
+      for view_path in split(globpath(self.name_to_path_viewdir(a:controller_name, a:view_name, theme_name), "**/" . view_name . ".ctp"), "\n")
+        if filereadable(view_path)
+          call add(views, view_path)
+        endif
+      endfor
     endfor
 
     let i = len(views)
