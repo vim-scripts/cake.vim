@@ -5,6 +5,303 @@
 let s:save_cpo = &cpo
 set cpo&vim
 
+
+" SECTION: Script Variables {{{
+" ============================================================
+let s:cache_last_app_path = ''
+let s:is_initialized = 0
+" }}}
+
+function! cake#initialize(path) " {{{
+
+  let a:path_app = ''
+
+  " set app directory of the project.
+  if a:path != ''
+    let a:path_app = fnamemodify(a:path, ":p")
+  elseif exists("g:cakephp_app") && g:cakephp_app != ''
+    let a:path_app = g:cakephp_app
+  endif
+
+  " call factory method
+  if cake#is_cake20(a:path_app)
+    let g:cake = cake#cake20#factory(a:path_app)
+    let s:is_initialized = 1
+    call cake#map_commands()
+  elseif cake#is_cake13(a:path_app)
+    let g:cake = cake#cake13#factory(a:path_app)
+    let s:is_initialized = 1
+    call cake#map_commands()
+  else
+    call cake#util#echo_warning("[cake.vim] Please set an application directory of CakePHP.")
+    let s:is_initialized = 0
+    return
+  endif
+
+  call g:cake.set_log(g:cakephp_log)
+
+endfunction " }}}
+function! cake#autoset_app() "{{{
+
+  " find Config/core.php
+  let app_config_path  = finddir('Config', escape(expand("%:p:h"), ' \') . ';')
+  if app_config_path != '' && filereadable(app_config_path . '/core.php')
+    let app_path = fnamemodify(app_config_path, ":h")
+    call cake#initialize(app_path)
+    let s:cache_last_app_path = app_path
+    return
+  endif
+
+  " find config/core.php
+  let app_config_path  = finddir('config', escape(expand("%:p:h"), ' \') . ';')
+  if app_config_path != '' && filereadable(app_config_path . '/core.php')
+    let app_path = fnamemodify(app_config_path, ":h")
+    call cake#initialize(app_path)
+    let s:cache_last_app_path = app_path
+    return
+  endif
+
+  " retry
+  if s:cache_last_app_path != '' && isdirectory(s:cache_last_app_path)
+    call cake#initialize(s:cache_last_app_path)
+  endif
+endfunction "}}}
+function! cake#map_commands() "{{{
+  if s:is_initialized == 0
+    return
+  endif
+
+  nnoremap <buffer> <silent> <Plug>CakeJump       :<C-u>call cake#smart_jump('n')<CR>
+  nnoremap <buffer> <silent> <Plug>CakeSplitJump  :<C-u>call cake#smart_jump('s')<CR>
+  nnoremap <buffer> <silent> <Plug>CakeVSplitJump :<C-u>call cake#smart_jump('v')<CR>
+  nnoremap <buffer> <silent> <Plug>CakeTabJump    :<C-u>call cake#smart_jump('t')<CR>
+  if !hasmapto('<Plug>CakeJump')
+    nmap <buffer> gf <Plug>CakeJump
+  endif
+  if !hasmapto('<Plug>CakeSplitJump')
+    nmap <buffer> <C-w>f <Plug>CakeSplitJump
+  endif
+  if !hasmapto('<Plug>CakeVSplitJump')
+    exe 'nmap <buffer> ' . g:cakephp_keybind_vsplit_gf . ' <Plug>CakeVSplitJump'
+  endif
+  if !hasmapto('<Plug>CakeTabJump')
+    nmap <buffer> <C-w>gf <Plug>CakeTabJump
+  endif
+
+endfunction "}}}
+function! cake#smart_jump(option) "{{{
+  call g:cake.smart_jump(a:option)
+endfunction "}}}
+
+function! cake#is_cake13(path) "{{{
+  let l:path = fnamemodify(a:path, ":p")
+  if isdirectory(l:path. 'controllers') && isdirectory(l:path . 'models') && isdirectory(l:path . 'views')
+    return 1
+  endif
+  return 0
+endfunction " }}}
+function! cake#is_cake20(path) " {{{
+  let l:path = fnamemodify(a:path, ":p")
+  if isdirectory(l:path. 'Controller') && isdirectory(l:path . 'Model') && isdirectory(l:path . 'View')
+    return 1
+  endif
+  return 0
+endfunction " }}}
+
+
+" Functions: get_complelist_xxx()
+" ============================================================
+function! cake#get_complelist(dict,ArgLead) "{{{
+  let list = sort(keys(a:dict))
+  return filter(list, 'v:val =~ "^'. fnameescape(a:ArgLead) . '"')
+endfunction "}}}
+function! cake#get_complelist_lib(ArgLead, CmdLine, CursorPos) "{{{
+  try
+    let list = cake#get_complelist(g:cake.get_libs(), a:ArgLead)
+    return list
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_controller(ArgLead, CmdLine, CursorPos) "{{{
+  try
+    let list = cake#get_complelist(g:cake.get_controllers(), a:ArgLead)
+    return list
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_model(ArgLead, CmdLine, CursorPos) " {{{
+  try
+    let list = cake#get_complelist(g:cake.get_models(), a:ArgLead)
+    return list
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_view(ArgLead, CmdLine, CursorPos) "{{{
+  try
+    let args = split(a:CmdLine, '\W\+')
+    let view_name = get(args, 1)
+    let theme_name = get(args, 2)
+
+    if !g:cake.is_controller(expand("%:p"))
+      return []
+    else
+      let controller_name = g:cake.path_to_name_controller(expand('%:p'))
+      let views = keys(g:cake.get_views(controller_name))
+
+      " get list of View name.
+      if count(views, view_name) == 0
+        return filter(sort(views), 'v:val =~ "^'. fnameescape(a:ArgLead) . '"')
+      else
+        " View name is ok. Next, get list of Theme name.
+        let themes = g:cake.get_themes()
+        if !has_key(themes, theme_name)
+          return filter(sort(keys(themes)), 'v:val =~ "^'. fnameescape(a:ArgLead) . '"')
+        endif
+      endif
+
+    endif
+
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_controllerview(ArgLead, CmdLine, CursorPos) "{{{
+  try
+    let args = split(a:CmdLine, '\W\+')
+    let controller_name = cake#util#camelize(get(args, 1))
+    let view_name = get(args, 2)
+    let theme_name = get(args, 3)
+    let controllers = g:cake.get_controllers()
+    let themes = g:cake.get_themes()
+
+    if !has_key(controllers, controller_name)
+      " Completion of the first argument.
+      " Returns a list of the controller name.
+      return cake#get_complelist_controller(a:ArgLead, a:CmdLine, a:CursorPos)
+    elseif count(keys(g:cake.get_views(controller_name)), view_name) == 0
+      " Completion of the second argument.
+      " Returns a list of view names.
+      " The view corresponds to the first argument specified in the controller.
+      return filter(sort(keys(g:cake.get_views(controller_name))), 'v:val =~ "^'. fnameescape(a:ArgLead) . '"')
+    elseif !has_key(themes, theme_name)
+      " Completion of the third argument.
+      " Returns a list of theme names.
+      return filter(sort(keys(themes)), 'v:val =~ "^'. fnameescape(a:ArgLead) . '"')
+    endif
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_config(ArgLead, CmdLine, CursorPos) " {{{
+  try
+    let list = cake#get_complelist(g:cake.get_configs(), a:ArgLead)
+    return list
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_component(ArgLead, CmdLine, CursorPos) " {{{
+  try
+    let list = cake#get_complelist(g:cake.get_components(), a:ArgLead)
+    return list
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_shell(ArgLead, CmdLine, CursorPos) " {{{
+  try
+    let list = cake#get_complelist(g:cake.get_shells(), a:ArgLead)
+    return list
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_task(ArgLead, CmdLine, CursorPos) " {{{
+  try
+    let list = cake#get_complelist(g:cake.get_tasks(), a:ArgLead)
+    return list
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_behavior(ArgLead, CmdLine, CursorPos) " {{{
+  try
+    let list = cake#get_complelist(g:cake.get_behaviors(), a:ArgLead)
+    return list
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_helper(ArgLead, CmdLine, CursorPos) " {{{
+  try
+    let list = cake#get_complelist(g:cake.get_helpers(), a:ArgLead)
+    return list
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_testmodel(ArgLead, CmdLine, CursorPos) " {{{
+  try
+    let list = cake#get_complelist(g:cake.get_testmodels(), a:ArgLead)
+    return list
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_testbehavior(ArgLead, CmdLine, CursorPos) " {{{
+  try
+    let list = cake#get_complelist(g:cake.get_testbehaviors(), a:ArgLead)
+    return list
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_testcomponent(ArgLead, CmdLine, CursorPos) " {{{
+  try
+    let list = cake#get_complelist(g:cake.get_testcomponents(), a:ArgLead)
+    return list
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_testcontroller(ArgLead, CmdLine, CursorPos) " {{{
+  try
+    let list = cake#get_complelist(g:cake.get_testcontrollers(), a:ArgLead)
+    return list
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_testhelper(ArgLead, CmdLine, CursorPos) " {{{
+  try
+    let list = cake#get_complelist(g:cake.get_testhelpers(), a:ArgLead)
+    return list
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_fixture(ArgLead, CmdLine, CursorPos) "{{{
+  try
+    let list = cake#get_complelist(g:cake.get_fixtures(), a:ArgLead)
+    return list
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_log(ArgLead, CmdLine, CursorPos) " {{{
+  try
+    let list = sort(keys(g:cakephp_log))
+    return filter(sort(list), 'v:val =~ "^'. fnameescape(a:ArgLead) . '"')
+  catch
+    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+" ============================================================
+
+
 function! cake#factory(path_app)
 
   let self = {}
@@ -123,6 +420,16 @@ function! cake#factory(path_app)
       let behaviors[name] = path
     endfor
 
+    for build_path in self.get_build_paths('behaviors')
+      for path in split(globpath(build_path, "*.php"), "\n")
+        let name = self.path_to_name_behavior(path)
+        if !has_key(behaviors, name)
+          let behaviors[name] = path
+        endif
+      endfor
+    endfor
+
+
     return behaviors
   endfunction " }}}
   function! self.get_components() "{{{
@@ -133,6 +440,15 @@ function! cake#factory(path_app)
       let components[name] = path
     endfor
 
+    for build_path in self.get_build_paths('components')
+      for path in split(globpath(build_path, "*.php"), "\n")
+        let name = self.path_to_name_component(path)
+        if !has_key(components, name)
+          let components[name] = path
+        endif
+      endfor
+    endfor
+
     return components
   endfunction "}}}
   function! self.get_helpers() "{{{
@@ -141,6 +457,15 @@ function! cake#factory(path_app)
     for path in split(globpath(self.paths.helpers, "*.php"), "\n")
       let name = self.path_to_name_helper(path)
       let helpers[name] = path
+    endfor
+
+    for build_path in self.get_build_paths('helpers')
+      for path in split(globpath(build_path, "*.php"), "\n")
+        let name = self.path_to_name_helper(path)
+        if !has_key(helpers, name)
+          let helpsers[name] = path
+        endif
+      endfor
     endfor
 
     return helpers
@@ -329,7 +654,7 @@ function! cake#factory(path_app)
       if self.is_controller(path)
         " let target = cake#util#singularize(substitute(cake#util#camelize(expand("%:p:t:r")), "Controller$", "", ""))
         call add(targets, cake#util#singularize(substitute(cake#util#camelize(expand("%:p:t:r")), "Controller$", "", "")))
-      elseif self.is_testmodel(path)
+      elseif self.is_testmodel(path);
         " let target = self.path_to_name_testmodel(path)
         call add(targets, self.path_to_name_testmodel(path))
       elseif self.is_fixture(path)
@@ -360,6 +685,7 @@ function! cake#factory(path_app)
 
   endfunction "}}}
   function! self.jump_view(...) " {{{
+    let views = []
 
     if !self.is_controller(expand("%:p"))
       call cake#util#echo_warning("No Controller in current buffer.")
@@ -367,27 +693,89 @@ function! cake#factory(path_app)
     endif
 
     let split_option = a:1
-    let view_name = a:2
+    let controller_name = self.path_to_name_controller(expand('%:p'))
 
-    if a:0 >= 3
-      let theme = a:3
+    " determine view
+    if exists('a:2')
+      let view_name = a:2
+      if match(view_name, '/') > 0
+        let view_name = view_name[strridx(view_name, '/')+1:]
+      endif
     else
-      let theme = (exists("g:cakephp_use_theme") && g:cakephp_use_theme != '')? g:cakephp_use_theme : ''
+      let neighbor_line = 0
+      let func_line = self.get_views(controller_name)
+      let current_line = line(".")
+      for l in cake#util#nrsort(values(func_line))
+        if l <= current_line
+          let neighbor_line = l
+          break
+        endif
+      endfor
+
+      if neighbor_line == 0
+        return
+      endif
+
+      for [f, l] in items(func_line)
+        if l == neighbor_line
+          let view_name = f
+          break
+        endif
+      endfor
+
     endif
 
-    let controller_name = self.path_to_name_controller(expand("%:p"))
-    let view_path = self.name_to_path_view(controller_name, view_name, theme)
+    " create theme list
+    if exists('a:3')
+      let theme = a:3
+      let themes = [theme]
+    elseif exists("g:cakephp_use_theme") && strlen(g:cakephp_use_theme) > 0
+      let theme = g:cakephp_use_theme
+      let themes = [theme]
+    else
+      let theme = '' "no theme
+      let themes = keys(self.get_themes())
+      let themes = insert(themes, theme)
+    endif
 
-    " If the file does not exist, ask whether to create a new file.
-    if !filewritable(view_path)
-      if !cake#util#confirm_create_file(view_path)
-        call cake#util#echo_warning(view_path . " is not found.")
+    " find paths of view.
+    for theme_name in themes
+      let view_dir = self.name_to_path_viewdir(controller_name, view_name, theme_name)
+      for view_path in split(globpath(view_dir, '**/' . view_name . '.ctp'), "\n")
+        if filereadable(view_path)
+          call add(views, view_path)
+        endif
+      endfor
+    endfor
+
+    let i = len(views)
+    if i == 0
+      " If the file does not exist, ask whether to create a new file.
+      let target_view_path = self.name_to_path_view(controller_name, view_name, theme)
+      if !cake#util#confirm_create_file(target_view_path)
+        call cake#util#echo_warning(target_view_path . " is not found.")
         return
+      endif
+    elseif i == 1
+      let target_view_path = views[0]
+    elseif i > 1
+      " Choice view
+      let n = 1
+      let tmp_choices = []
+      for str in views
+        let str = n . ": " . self.abbreviate(str)
+        call add(tmp_choices, str)
+        let n = n + 1
+      endfor
+      let choices = join(tmp_choices,"\n")
+      let c = confirm('Which file do you jump to?', choices, 0)
+      if c > 0
+        let index = c - 1
+        let target_view_path = views[index]
       endif
     endif
 
-    let line = 0
-    call cake#util#open_file(view_path, split_option, line)
+    call cake#util#open_file(target_view_path, split_option, 0)
 
   endfunction "}}}
   function! self.jump_controllerview(...) " {{{
@@ -970,6 +1358,10 @@ function! cake#factory(path_app)
     let l_word = expand('<cWORD>')
     let libs = {}
 
+    if strlen(word) == 0
+      return
+    endif
+
     " in Controller "{{{
     if self.is_controller(path)
       let controller_name = self.path_to_name_controller(path)
@@ -978,13 +1370,13 @@ function! cake#factory(path_app)
       " Controller / function xxx() -> View
       let view_name = matchstr(line, '\(function\s\+\)\zs\w\+\ze\(\s*(\)')
       if strlen(view_name) > 0
-        call self.smart_jump_view(controller_name, view_name, option)
+        call self.jump_view(option, view_name)
         return
       endif
       " Controller / $this->render('xxx') -> View
       let view_name = matchstr(line, '\(\$this->render(\s*["'']\)\zs[0-9A-Za-z/_.-]\+\ze\(["'']\s*)\)')
       if strlen(view_name) > 0
-        call self.smart_jump_view(controller_name, view_name, option)
+        call self.jump_view(option, view_name)
         return
       endif
 
@@ -1002,7 +1394,7 @@ function! cake#factory(path_app)
       endif
 
       " Controller / class HogesController extends AppController -> AppController
-      let controller_name = matchstr(line, '\(class\s\w\+Controller\sextends\s\)\zs\w\+\ze\(Controller\)' )
+      let controller_name = matchstr(line, '\(class\s\+\w\+Controller\s\+extends\s\+\)\zs\w\+\ze\(Controller\)' )
       if strlen(controller_name) > 0
         let controller_name = cake#util#decamelize(controller_name)
         if self.is_controller(self.name_to_path_controller(controller_name))
@@ -1013,16 +1405,16 @@ function! cake#factory(path_app)
 
 
       " Controller -> Model or Behavior or Component or Helper
-      if self.is_model(self.name_to_path_model(word))
+      if self.is_model(self.name_to_path_model(word)) || self.in_build_path_model(word)
         call self.jump_model(option, word)
         return
-      elseif self.is_behavior(self.name_to_path_behavior(word))
+      elseif self.is_behavior(self.name_to_path_behavior(word)) || self.in_build_path_behavior(word)
         call self.jump_behavior(option, word)
         return
-      elseif self.is_component(self.name_to_path_component(word))
+      elseif self.is_component(self.name_to_path_component(word)) || self.in_build_path_component(word)
         call self.jump_component(option, word)
         return
-      elseif self.is_helper(self.name_to_path_helper(word))
+      elseif self.is_helper(self.name_to_path_helper(word)) || self.in_build_path_helper(word)
         call self.jump_helper(option, word)
         return
       elseif self.is_controller(self.name_to_path_controller(cake#util#pluralize(word)))
@@ -1060,10 +1452,10 @@ function! cake#factory(path_app)
       endif
 
       " Model -> Model or Behavior or Controller
-      if self.is_model(self.name_to_path_model(word))
+      if self.is_model(self.name_to_path_model(word)) || self.in_build_path_model(word)
         call self.jump_model(option, word)
         return
-      elseif self.is_behavior(self.name_to_path_behavior(word))
+      elseif self.is_behavior(self.name_to_path_behavior(word)) || self.in_build_path_behavior(word)
         call self.jump_behavior(option, word)
         return
       elseif self.is_controller(self.name_to_path_controller(cake#util#pluralize(word)))
@@ -1121,10 +1513,10 @@ function! cake#factory(path_app)
       endif
 
       " View -> Helper or Model or Controller
-      if self.is_helper(self.name_to_path_helper(word))
+      if self.is_helper(self.name_to_path_helper(word)) || self.in_build_path_helper(word)
         call self.jump_helper(option, word)
         return
-      elseif self.is_model(self.name_to_path_model(word))
+      elseif self.is_model(self.name_to_path_model(word)) || self.in_build_path_model(word)
         call self.jump_model(option, word)
         return
       elseif self.is_controller(self.name_to_path_controller(cake#util#pluralize(word)))
@@ -1151,13 +1543,13 @@ function! cake#factory(path_app)
     if self.is_component(path)
 
       " Component -> Model or Behavior or Component or Controller
-      if self.is_model(self.name_to_path_model(word))
+      if self.is_model(self.name_to_path_model(word)) || self.in_build_path_model(word)
         call self.jump_model(option, word)
         return
-      elseif self.is_behavior(self.name_to_path_behavior(word))
+      elseif self.is_behavior(self.name_to_path_behavior(word)) || self.in_build_path_behavior(word)
         call self.jump_behavior(option, word)
         return
-      elseif self.is_component(self.name_to_path_component(word))
+      elseif self.is_component(self.name_to_path_component(word)) || self.in_build_path_component(word)
         call self.jump_component(option, word)
         return
       elseif self.is_controller(self.name_to_path_controller(cake#util#pluralize(word)))
@@ -1184,10 +1576,10 @@ function! cake#factory(path_app)
     if self.is_behavior(path)
 
       " Behavior -> Model or Behavior
-      if self.is_model(self.name_to_path_model(word))
+      if self.is_model(self.name_to_path_model(word)) || self.in_build_path_model(word)
         call self.jump_model(option, word)
         return
-      elseif self.is_behavior(self.name_to_path_behavior(word))
+      elseif self.is_behavior(self.name_to_path_behavior(word)) || self.in_build_path_behavior(word)
         call self.jump_behavior(option, word)
         return
       endif
@@ -1211,7 +1603,7 @@ function! cake#factory(path_app)
     if self.is_helper(path)
 
       " Helper -> Helper Controller
-      if self.is_helper(self.name_to_path_helper(word))
+      if self.is_helper(self.name_to_path_helper(word)) || self.in_build_path_helper(word)
         call self.jump_helper(option, word)
         return
       elseif self.is_controller(self.name_to_path_controller(cake#util#pluralize(word)))
@@ -1252,7 +1644,7 @@ function! cake#factory(path_app)
       if self.is_fixture(self.name_to_path_fixture(word))
         call self.jump_fixture(option, word)
         return
-      elseif self.is_model(self.name_to_path_model(word))
+      elseif self.is_model(self.name_to_path_model(word)) || self.in_build_path_model(word)
         call self.jump_model(option, word)
         return
       endif
@@ -1264,7 +1656,7 @@ function! cake#factory(path_app)
       if self.is_fixture(self.name_to_path_fixture(word))
         call self.jump_fixture(option, word)
         return
-      elseif self.is_behavior(self.name_to_path_behavior(word))
+      elseif self.is_behavior(self.name_to_path_behavior(word)) || self.in_build_path_behavior(word)
         call self.jump_behavior(option, word)
         return
       endif
@@ -1276,7 +1668,7 @@ function! cake#factory(path_app)
       if self.is_fixture(self.name_to_path_fixture(word))
         call self.jump_fixture(option, word)
         return
-      elseif self.is_component(self.name_to_path_component(word))
+      elseif self.is_component(self.name_to_path_component(word)) || self.in_build_path_component(word)
         call self.jump_component(option, word)
         return
       endif
@@ -1288,7 +1680,7 @@ function! cake#factory(path_app)
       if self.is_fixture(self.name_to_path_fixture(word))
         call self.jump_fixture(option, word)
         return
-      elseif self.is_helper(self.name_to_path_helper(word))
+      elseif self.is_helper(self.name_to_path_helper(word)) || self.in_build_path_helper(word)
         call self.jump_helper(option, word)
         return
       endif
@@ -1298,7 +1690,7 @@ function! cake#factory(path_app)
     if self.is_fixture(path)
 
       " Fixture -> Model
-      if self.is_model(self.name_to_path_model(word))
+      if self.is_model(self.name_to_path_model(word)) || self.in_build_path_model(word)
         call self.jump_model(option, word)
         return
       endif
@@ -1312,7 +1704,7 @@ function! cake#factory(path_app)
       if self.is_task(self.name_to_path_task(word))
         call self.jump_task(option, word)
         return
-      elseif self.is_model(self.name_to_path_model(word))
+      elseif self.is_model(self.name_to_path_model(word)) || self.in_build_path_model(word)
         call self.jump_model(option, word)
         return
       endif
@@ -1321,7 +1713,8 @@ function! cake#factory(path_app)
       if len(libs) == 0
         let libs = self.get_libs()
       endif
-      let priority_order = ['', 'Behavior', 'Component', 'Helper']
+
+      let priority_order = ['Task', '', 'Behavior', 'Component', 'Helper']
       for suffix in priority_order
         let target = word . suffix
         if has_key(libs, target)
@@ -1336,7 +1729,7 @@ function! cake#factory(path_app)
     if self.is_task(path)
 
       " Task -> Model
-      if self.is_model(self.name_to_path_model(word))
+      if self.is_model(self.name_to_path_model(word)) || self.in_build_path_model(word)
         call self.jump_model(option, word)
         return
       endif
@@ -1623,52 +2016,6 @@ function! cake#factory(path_app)
     " Default action
     call self.gf(option)
   endfunction "}}}
-  function! self.smart_jump_view(controller_name, view_name, option) "{{{
-    let views = []
-
-    if match(a:view_name, '/') > 0
-      let view_name = a:view_name[strridx(a:view_name, '/')+1:]
-    else
-      let view_name = a:view_name
-    endif
-
-    let themes = keys(self.get_themes())
-    let themes = insert(themes, '') "no theme
-
-    for theme_name in themes
-      for view_path in split(globpath(self.name_to_path_viewdir(a:controller_name, a:view_name, theme_name), "**/" . view_name . ".ctp"), "\n")
-        if filereadable(view_path)
-          call add(views, view_path)
-        endif
-      endfor
-    endfor
-
-    let i = len(views)
-    if i == 0
-      return
-    elseif i == 1
-      call cake#util#open_file(views[0], a:option, 0)
-      return
-    elseif i > 1
-      let n = 1
-      let tmp_choices = []
-      for str in views
-        let str = n . ": " . self.abbreviate(str)
-        call add(tmp_choices, str)
-        let n = n + 1
-      endfor
-      let choices = join(tmp_choices,"\n")
-      let c = confirm('Which file do you jump to?', choices, 0)
-      if c > 0
-        let index = c - 1
-        call cake#util#open_file(views[index], a:option, 0)
-        return
-      endif
-    endif
-
-    " Default action
-    call self.gf(option)
-  endfunction "}}}
   function! self.gf(option) "{{{
     if a:option == 'n'
       exec "normal! gf"
@@ -1678,7 +2025,50 @@ function! cake#factory(path_app)
       exec "normal! \<C-w>gf"
     endif
   endfunction "}}}
+  " ============================================================
 
+  " Functions: in_build_path_xxx()
+  " ============================================================
+  function! self.in_build_path_model(name) "{{{
+    for build_path in self.get_build_paths('models')
+      for path in split(globpath(build_path, "*.php"), "\n")
+        if self.path_to_name_model(path) == a:name
+          return 1
+        endif
+      endfor
+    endfor
+    return 0
+  endfunction "}}}
+  function! self.in_build_path_behavior(name) "{{{
+    for build_path in self.get_build_paths('behaviors')
+      for path in split(globpath(build_path, "*.php"), "\n")
+        if self.path_to_name_behavior(path) == a:name
+          return 1
+        endif
+      endfor
+    endfor
+    return 0
+  endfunction "}}}
+  function! self.in_build_path_component(name) "{{{
+    for build_path in self.get_build_paths('components')
+      for path in split(globpath(build_path, "*.php"), "\n")
+        if self.path_to_name_component(path) == a:name
+          return 1
+        endif
+      endfor
+    endfor
+    return 0
+  endfunction "}}}
+  function! self.in_build_path_helper(name) "{{{
+    for build_path in self.get_build_paths('helpers')
+      for path in split(globpath(build_path, "*.php"), "\n")
+        if self.path_to_name_helper(path) == a:name
+          return 1
+        endif
+      endfor
+    endfor
+    return 0
+  endfunction "}}}
   " ============================================================
 
   " Functions: common functions
@@ -1797,12 +2187,20 @@ function! cake#factory(path_app)
     echo 'Save Element: '. output_file
 
   endfunction "}}}
+  function! self.get_build_paths(name) "{{{
+    let paths = []
+    let app_config = cake#util#eval_json_file(self.paths.app . g:cakephp_app_config_file)
+    if has_key(app_config, 'build_path') && has_key(app_config.build_path, a:name)
+      let paths = app_config.build_path[a:name]
+    endif
+    return paths
+  endfunction "}}}
   " ============================================================
-
 
   return self
 endfunction
 " ============================================================
+
 
 
 let &cpo = s:save_cpo

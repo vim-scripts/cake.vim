@@ -165,6 +165,15 @@ function! cake#cake13#factory(path_app)
       let models[self.path_to_name_model(path)] = path
     endfor
 
+    for build_path in self.get_build_paths('models')
+      for path in split(globpath(build_path, "*.php"), "\n")
+        let name = self.path_to_name_model(path)
+        if !has_key(models, name)
+          let models[name] = path
+        endif
+      endfor
+    endfor
+
     return models
 
   endfunction
@@ -181,15 +190,28 @@ function! cake#cake13#factory(path_app)
       let helpers[self.path_to_name_helper(path)] = path
     endfor
 
+    for build_path in self.get_build_paths('helpers')
+      for path in split(globpath(build_path, "*.php"), "\n")
+        let name = self.path_to_name_helper(path)
+        if !has_key(helpers, name)
+          let helpsers[name] = path
+        endif
+      endfor
+    endfor
+
     return helpers
   endfunction " }}}
   function! self.get_views(controller_name) "{{{
 
-    let views = []
+    " key = func_name, val = line_number
+    let views = {}
 
     " Extracting the function name.
-    let cmd = 'grep -E "^\s*function\s*\w+\s*\(" ' . self.name_to_path_controller(a:controller_name)
+    let cmd = 'grep -nE "^\s*function\s*\w+\s*\(" ' . self.name_to_path_controller(a:controller_name)
     for line in split(system(cmd), "\n")
+
+      " cast int
+      let line_number = matchstr(line, '^\d\+') + 0
 
       let s = matchend(line, "\s*function\s*.")
       let e = match(line, "(")
@@ -197,7 +219,7 @@ function! cake#cake13#factory(path_app)
 
       " Callback functions are not eligible.
       if func_name !~ "^_" && func_name !=? "beforeFilter" && func_name !=? "beforeRender" && func_name !=? "afterFilter"
-        let views = add(views , func_name)
+        let views[func_name] = line_number
       endif
     endfor
 
