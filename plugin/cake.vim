@@ -1,8 +1,7 @@
 " cake.vim - Utility for CakePHP developpers.
 " Maintainer:  Yuhei Kagaya <yuhei.kagaya@gmail.com>
 " License:     This file is placed in the public domain.
-" Last Change: 2013/03/06
-" Version:     2.10.1
+" Last Change: 2013/05/10
 
 if exists('g:loaded_cake_vim')
   finish
@@ -23,60 +22,57 @@ endif
 let s:save_cpo = &cpo
 set cpo&vim
 
-" SECTION: Global Variables {{{
-" Please write $MYVIMRC. (Also work to write.)
-" ============================================================
+" SECTION: Optional Settings
 " let g:cakephp_enable_fix_mode = 1
 " let g:cakephp_app             = "/path/to/cakephp_root/app/"
 " let g:cakephp_use_theme       = "admin"
 " let g:cakephp_core_path       = "/path/to/cakephp_core/"
+" let g:cakephp_abbreviations     = {
+      " \ 'td'  : '$this->data',
+      " \ 'trd' : '$this->request->data',
+      " \ 'ta'  : '$this->alias',
+      " \ }
 
+" SECTION: Global Variables {{{
 " fix setting of the app.
-let g:cakephp_enable_fix_mode   = get(g:, 'cakephp_enable_fix_mode', 0)
-let g:cakephp_app               = get(g:, 'cakephp_app', '')
-let g:cakephp_use_theme         = get(g:, 'cakephp_use_theme', '')
-let g:cakephp_core_path         = get(g:, 'cakephp_core_path', '')
+let g:cakevim_version                   = '2.11'
+let g:cakephp_enable_fix_mode           = get(g:, 'cakephp_enable_fix_mode', 0)
+let g:cakephp_app                       = get(g:, 'cakephp_app', '')
+let g:cakephp_use_theme                 = get(g:, 'cakephp_use_theme', '')
+let g:cakephp_core_path                 = get(g:, 'cakephp_core_path', '')
 " automatically look for app and set it
-let g:cakephp_enable_auto_mode  = get(g:, 'cakephp_enable_auto_mode', (g:cakephp_enable_fix_mode)? 0 : 1)
-let g:cakephp_log_window_size   = get(g:, 'cakephp_log_window_size', 15)
-let g:cakephp_db_type           = get(g:, 'cakephp_db_type', 'MySQL')
-let g:cakephp_db_port           = get(g:, 'cakephp_db_port', 3306)
-let g:cakephp_db_buffer_lines   = get(g:, 'cakephp_db_buffer_lines', 20)
-let g:cakephp_app_config_file   = get(g:, 'cakephp_app_config_file', '.cake')
-let g:cakephp_keybind_vsplit_gf = get(g:, 'cakephp_keybind_vsplit_gf', 'gs')
-if !exists('g:cakephp_log')
-  let g:cakephp_log = {
-        \ 'debug' : '',
-        \ 'error' : '',
-        \ 'query' : '/var/log/mysql/query.log',
-        \ 'access': '/usr/local/apache2/logs/access_log'
-        \ }
-endif
+let g:cakephp_enable_auto_mode          = get(g:, 'cakephp_enable_auto_mode', (g:cakephp_enable_fix_mode)? 0 : 1)
+let g:cakephp_enable_abbreviations      = get(g:, 'cakephp_enable_abbreviations', 0)
+let g:cakephp_log_window_size           = get(g:, 'cakephp_log_window_size', 15)
+let g:cakephp_db_type                   = get(g:, 'cakephp_db_type', 'MySQL')
+let g:cakephp_db_port                   = get(g:, 'cakephp_db_port', 3306)
+let g:cakephp_db_buffer_lines           = get(g:, 'cakephp_db_buffer_lines', 20)
+let g:cakephp_app_config_file           = get(g:, 'cakephp_app_config_file', '.cake')
+let g:cakephp_keybind_vsplit_gf         = get(g:, 'cakephp_keybind_vsplit_gf', 'gs')
+let g:cakephp_log                       = get(g:, 'cakephp_log', {
+                                              \ 'debug' : '',
+                                              \ 'error' : '',
+                                              \ 'query' : '/var/log/mysql/query.log',
+                                              \ 'access': '/usr/local/apache2/logs/access_log'
+                                              \ })
 
 let g:cake = {}
 " }}}
 " SECTION: Auto commands {{{
-"============================================================
-if g:cakephp_enable_fix_mode
-  autocmd! VimEnter * call cake#initialize('')
-elseif  g:cakephp_enable_auto_mode
-  autocmd! BufEnter *.php,*.ctp,*.css,*.js call cake#autoset_app()
-endif
-
-augroup cakephp-filetype-commands
+augroup detect_cakephp_project
   autocmd!
-  " Set gf commands
-  autocmd FileType php,ctp,htmlcake call cake#map_commands()
-  " Cut an element partially.
-  " Argument is element name(,theme name).
-  autocmd FileType php,ctp,htmlcake command! -n=1 -bang -buffer -range Celement :<line1>,<line2>call g:cake.clip_element(<bang>0,<f-args>)
+  autocmd VimEnter * if g:cakephp_enable_fix_mode | call cake#init_app('') | endif
+  autocmd BufEnter *.php,*.ctp,*.css,*.js if g:cakephp_enable_auto_mode | call cake#autoset_app() | endif
+  autocmd FileType php,ctp,htmlcake call cake#init_buffer()
 augroup END
 
 " }}}
 " SECTION: Commands {{{
 " ============================================================
+command! -n=0  Cakeinfo call cake#info()
+
 " Initialized. If you have an argument, given that initializes the app path.
-command! -n=? -complete=dir Cakephp :call cake#initialize(<f-args>)
+command! -n=? -complete=dir Cakephp :call cake#init_app(<f-args>)
 
 " * -> Controller
 " Argument is Controller.
@@ -211,6 +207,14 @@ command! -n=* -complete=customlist,cake#get_complelist_lib Clibtab call g:cake.j
 
 " Describe Table.
 command! -n=? -complete=customlist,cake#get_complelist_model Cdesc call g:cake.describe_table(<f-args>)
+
+command! -n=0 -range Cquickrun :<line1>,<line2>call g:cake.quickrun()
+
+" Run Bake
+command! -n=* -complete=customlist,cake#get_complelist_bake Cbake call g:cake.bake_interactive(<f-args>)
+
+" Run Test
+command! -n=0  Ctestrun call g:cake.test(expand('%:p'))
 " }}}
 
 

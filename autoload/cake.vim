@@ -12,7 +12,36 @@ let s:cache_last_app_path = ''
 let s:is_initialized = 0
 " }}}
 
-function! cake#initialize(path) " {{{
+function! cake#info() "{{{
+  if s:is_initialized
+    let app     = g:cake.paths.app
+    let core    = g:cake.paths.cores.core
+    let cakephp = cake#version()
+    let buffer  = g:cake.buffer().type
+    else
+    let app     = ''
+    let core    = ''
+    let cakephp = ''
+    let buffer  = ''
+  endif
+  echo 'app      : ' . app
+  echo 'core     : ' . core
+  echo 'cakephp  : ' . cakephp
+  echo 'buffer   : ' . buffer
+  echo 'cake.vim : ' . g:cakevim_version
+endfunction "}}}
+function! cake#version() "{{{
+  let cakephp_version = 'unknown'
+  try
+    let php_code = 'echo trim(array_pop(file("' . g:cake.paths.cores.core . 'VERSION.txt")));'
+    let cmd = 'php -r ''' . php_code . ''''
+    let cakephp_version = eval(system(cmd))
+    let cakephp_version = type(cakephp_version) == type(0) || type(cakephp_version) == type(0.0) ? cakephp_version : 'unknown'
+  catch
+  endtry
+  return cakephp_version
+endfunction "}}}
+function! cake#init_app(path) " {{{
 
   let a:path_app = ''
 
@@ -27,13 +56,11 @@ function! cake#initialize(path) " {{{
   if cake#is_cake20(a:path_app)
     let g:cake = cake#cake20#factory(a:path_app)
     let s:is_initialized = 1
-    call cake#map_commands()
   elseif cake#is_cake13(a:path_app)
     let g:cake = cake#cake13#factory(a:path_app)
     let s:is_initialized = 1
-    call cake#map_commands()
   else
-    call cake#util#echo_warning("[cake.vim] Please set an application directory of CakePHP.")
+    call cake#util#warning("[cake.vim] Please set an application directory of CakePHP.")
     let s:is_initialized = 0
     return
   endif
@@ -47,7 +74,7 @@ function! cake#autoset_app() "{{{
   let app_config_path  = finddir('Config', escape(expand("%:p:h"), ' \') . ';')
   if app_config_path != '' && filereadable(app_config_path . '/core.php')
     let app_path = fnamemodify(app_config_path, ":h")
-    call cake#initialize(app_path)
+    call cake#init_app(app_path)
     let s:cache_last_app_path = app_path
     return
   endif
@@ -56,43 +83,16 @@ function! cake#autoset_app() "{{{
   let app_config_path  = finddir('config', escape(expand("%:p:h"), ' \') . ';')
   if app_config_path != '' && filereadable(app_config_path . '/core.php')
     let app_path = fnamemodify(app_config_path, ":h")
-    call cake#initialize(app_path)
+    call cake#init_app(app_path)
     let s:cache_last_app_path = app_path
     return
   endif
 
   " retry
   if s:cache_last_app_path != '' && isdirectory(s:cache_last_app_path)
-    call cake#initialize(s:cache_last_app_path)
+    call cake#init_app(s:cache_last_app_path)
   endif
 endfunction "}}}
-function! cake#map_commands() "{{{
-  if s:is_initialized == 0
-    return
-  endif
-
-  nnoremap <buffer> <silent> <Plug>CakeJump       :<C-u>call cake#smart_jump('n')<CR>
-  nnoremap <buffer> <silent> <Plug>CakeSplitJump  :<C-u>call cake#smart_jump('s')<CR>
-  nnoremap <buffer> <silent> <Plug>CakeVSplitJump :<C-u>call cake#smart_jump('v')<CR>
-  nnoremap <buffer> <silent> <Plug>CakeTabJump    :<C-u>call cake#smart_jump('t')<CR>
-  if !hasmapto('<Plug>CakeJump')
-    nmap <buffer> gf <Plug>CakeJump
-  endif
-  if !hasmapto('<Plug>CakeSplitJump')
-    nmap <buffer> <C-w>f <Plug>CakeSplitJump
-  endif
-  if !hasmapto('<Plug>CakeVSplitJump')
-    exe 'nmap <buffer> ' . g:cakephp_keybind_vsplit_gf . ' <Plug>CakeVSplitJump'
-  endif
-  if !hasmapto('<Plug>CakeTabJump')
-    nmap <buffer> <C-w>gf <Plug>CakeTabJump
-  endif
-
-endfunction "}}}
-function! cake#smart_jump(option) "{{{
-  call g:cake.smart_jump(a:option)
-endfunction "}}}
-
 function! cake#is_cake13(path) "{{{
   let l:path = fnamemodify(a:path, ":p")
   if isdirectory(l:path. 'controllers') && isdirectory(l:path . 'models') && isdirectory(l:path . 'views')
@@ -107,7 +107,69 @@ function! cake#is_cake20(path) " {{{
   endif
   return 0
 endfunction " }}}
+function! cake#init_buffer() "{{{
+  call cake#map_commands()
+  if g:cakephp_enable_abbreviations
+    call cake#set_abbreviations()
+  endif
+  " Cut an element partially. Argument is element name(,theme name).
+  command! -n=1 -bang -buffer -bar -range Celement :<line1>,<line2>call g:cake.clip_element(<bang>0,<f-args>)
+endfunction "}}}
+function! cake#map_commands() "{{{
+  nnoremap <buffer> <silent> <Plug>CakeJump       :<C-u>call g:cake.smart_jump('n')<CR>
+  nnoremap <buffer> <silent> <Plug>CakeSplitJump  :<C-u>call g:cake.smart_jump('s')<CR>
+  nnoremap <buffer> <silent> <Plug>CakeVSplitJump :<C-u>call g:cake.smart_jump('v')<CR>
+  nnoremap <buffer> <silent> <Plug>CakeTabJump    :<C-u>call g:cake.smart_jump('t')<CR>
+  if !hasmapto('<Plug>CakeJump')
+    nmap <buffer> gf <Plug>CakeJump
+  endif
+  if !hasmapto('<Plug>CakeSplitJump')
+    nmap <buffer> <C-w>f <Plug>CakeSplitJump
+  endif
+  if !hasmapto('<Plug>CakeVSplitJump')
+    exe 'nmap <buffer> ' . g:cakephp_keybind_vsplit_gf . ' <Plug>CakeVSplitJump'
+  endif
+  if !hasmapto('<Plug>CakeTabJump')
+    nmap <buffer> <C-w>gf <Plug>CakeTabJump
+  endif
+endfunction "}}}
+function! cake#set_abbreviations() "{{{
+  let g:cakephp_abbreviations = get(g:, 'cakephp_abbreviations', {})
+  " self -> ClassName
+  let lhs = 'self'
+  if !has_key(g:cakephp_abbreviations, lhs)
+    call extend(g:cakephp_abbreviations, {lhs : '<C-r>=cake#expand_class_name("' . lhs . '")<CR>'})
+  endif
 
+  for i in items(g:cakephp_abbreviations)
+    let lhs = i[0]
+    let rhs = i[1]
+    exe 'inoreabbrev <buffer> <silent> ' . lhs . ' ' . rhs
+  endfor
+
+endfunction "}}}
+function! cake#expand_class_name(lhs) "{{{
+  if !s:is_initialized
+    return a:lhs
+  endif
+  let class_name = a:lhs
+  let target_class_types = [
+        \ 'controller', 'model', 'component', 'behavior', 'helper',
+        \ 'fixture', 'shell', 'task'
+        \ ]
+
+  try
+    let buffer = g:cake.buffer()
+    if (cake#util#in_array(buffer.type, target_class_types))
+      " help Funcref, Dictionary-function
+      let Fn = get(g:cake, 'path_to_name_' . buffer.type)
+      let class_name = call(Fn, [buffer.path, 1], g:cake)
+    endif
+  catch
+    let class_name = a:lhs
+  endtry
+  return class_name
+endfunction "}}}
 
 " Functions: get_complelist_xxx()
 " ============================================================
@@ -120,7 +182,7 @@ function! cake#get_complelist_lib(ArgLead, CmdLine, CursorPos) "{{{
     let list = cake#get_complelist(g:cake.get_libs(), a:ArgLead)
     return list
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_controller(ArgLead, CmdLine, CursorPos) "{{{
@@ -128,7 +190,7 @@ function! cake#get_complelist_controller(ArgLead, CmdLine, CursorPos) "{{{
     let list = cake#get_complelist(g:cake.get_controllers(), a:ArgLead)
     return list
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_model(ArgLead, CmdLine, CursorPos) " {{{
@@ -136,7 +198,7 @@ function! cake#get_complelist_model(ArgLead, CmdLine, CursorPos) " {{{
     let list = cake#get_complelist(g:cake.get_models(), a:ArgLead)
     return list
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_view(ArgLead, CmdLine, CursorPos) "{{{
@@ -165,7 +227,7 @@ function! cake#get_complelist_view(ArgLead, CmdLine, CursorPos) "{{{
     endif
 
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_controllerview(ArgLead, CmdLine, CursorPos) "{{{
@@ -192,7 +254,7 @@ function! cake#get_complelist_controllerview(ArgLead, CmdLine, CursorPos) "{{{
       return filter(sort(keys(themes)), 'v:val =~ "^'. fnameescape(a:ArgLead) . '"')
     endif
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_config(ArgLead, CmdLine, CursorPos) " {{{
@@ -200,7 +262,7 @@ function! cake#get_complelist_config(ArgLead, CmdLine, CursorPos) " {{{
     let list = cake#get_complelist(g:cake.get_configs(), a:ArgLead)
     return list
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_component(ArgLead, CmdLine, CursorPos) " {{{
@@ -208,7 +270,7 @@ function! cake#get_complelist_component(ArgLead, CmdLine, CursorPos) " {{{
     let list = cake#get_complelist(g:cake.get_components(), a:ArgLead)
     return list
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_shell(ArgLead, CmdLine, CursorPos) " {{{
@@ -216,7 +278,7 @@ function! cake#get_complelist_shell(ArgLead, CmdLine, CursorPos) " {{{
     let list = cake#get_complelist(g:cake.get_shells(), a:ArgLead)
     return list
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_task(ArgLead, CmdLine, CursorPos) " {{{
@@ -224,7 +286,7 @@ function! cake#get_complelist_task(ArgLead, CmdLine, CursorPos) " {{{
     let list = cake#get_complelist(g:cake.get_tasks(), a:ArgLead)
     return list
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_behavior(ArgLead, CmdLine, CursorPos) " {{{
@@ -232,7 +294,7 @@ function! cake#get_complelist_behavior(ArgLead, CmdLine, CursorPos) " {{{
     let list = cake#get_complelist(g:cake.get_behaviors(), a:ArgLead)
     return list
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_helper(ArgLead, CmdLine, CursorPos) " {{{
@@ -240,7 +302,7 @@ function! cake#get_complelist_helper(ArgLead, CmdLine, CursorPos) " {{{
     let list = cake#get_complelist(g:cake.get_helpers(), a:ArgLead)
     return list
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_testmodel(ArgLead, CmdLine, CursorPos) " {{{
@@ -248,7 +310,7 @@ function! cake#get_complelist_testmodel(ArgLead, CmdLine, CursorPos) " {{{
     let list = cake#get_complelist(g:cake.get_testmodels(), a:ArgLead)
     return list
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_testbehavior(ArgLead, CmdLine, CursorPos) " {{{
@@ -256,7 +318,7 @@ function! cake#get_complelist_testbehavior(ArgLead, CmdLine, CursorPos) " {{{
     let list = cake#get_complelist(g:cake.get_testbehaviors(), a:ArgLead)
     return list
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_testcomponent(ArgLead, CmdLine, CursorPos) " {{{
@@ -264,7 +326,7 @@ function! cake#get_complelist_testcomponent(ArgLead, CmdLine, CursorPos) " {{{
     let list = cake#get_complelist(g:cake.get_testcomponents(), a:ArgLead)
     return list
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_testcontroller(ArgLead, CmdLine, CursorPos) " {{{
@@ -272,7 +334,7 @@ function! cake#get_complelist_testcontroller(ArgLead, CmdLine, CursorPos) " {{{
     let list = cake#get_complelist(g:cake.get_testcontrollers(), a:ArgLead)
     return list
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_testhelper(ArgLead, CmdLine, CursorPos) " {{{
@@ -280,7 +342,7 @@ function! cake#get_complelist_testhelper(ArgLead, CmdLine, CursorPos) " {{{
     let list = cake#get_complelist(g:cake.get_testhelpers(), a:ArgLead)
     return list
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_fixture(ArgLead, CmdLine, CursorPos) "{{{
@@ -288,7 +350,7 @@ function! cake#get_complelist_fixture(ArgLead, CmdLine, CursorPos) "{{{
     let list = cake#get_complelist(g:cake.get_fixtures(), a:ArgLead)
     return list
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 function! cake#get_complelist_log(ArgLead, CmdLine, CursorPos) " {{{
@@ -296,7 +358,25 @@ function! cake#get_complelist_log(ArgLead, CmdLine, CursorPos) " {{{
     let list = sort(keys(g:cakephp_log))
     return filter(sort(list), 'v:val =~ "^'. fnameescape(a:ArgLead) . '"')
   catch
-    call cake#util#echo_warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
+function! cake#get_complelist_bake(ArgLead, CmdLine, CursorPos) "{{{
+  try
+    let args = split(a:CmdLine, '\W\+')
+
+    let bake_list      = ['fixture', 'test', 'model', 'controller']
+    let bake_list_test = ['model', 'controller', 'component', 'behavior', 'helper']
+
+    let arg1 = get(args, 1)
+
+    if !cake#util#in_array(arg1, bake_list)
+      return filter(sort(bake_list), 'v:val =~ "^'. fnameescape(a:ArgLead) . '"')
+    elseif arg1 ==? 'test'
+      return filter(sort(bake_list_test), 'v:val =~ "^'. fnameescape(a:ArgLead) . '"')
+    endif
+  catch
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
 " ============================================================
@@ -319,31 +399,31 @@ function! cake#factory(path_app)
   function! self.get_views()
   endfunction
 
-  function! self.path_to_name_controller(path)
+  function! self.path_to_name_controller(...)
   endfunction
-  function! self.path_to_name_component(path)
+  function! self.path_to_name_model(...)
   endfunction
-  function! self.path_to_name_model(path)
+  function! self.path_to_name_component(...)
   endfunction
-  function! self.path_to_name_testcontroller(path)
+  function! self.path_to_name_behavior(...)
   endfunction
-  function! self.path_to_name_testmodel(path)
+  function! self.path_to_name_helper(...)
   endfunction
-  function! self.path_to_name_testcomponent(path)
+  function! self.path_to_name_shell(...)
   endfunction
-  function! self.path_to_name_testhelper(path)
+  function! self.path_to_name_task(...)
   endfunction
-  function! self.path_to_name_testbehavior(path)
+  function! self.path_to_name_fixture(...)
   endfunction
-  function! self.path_to_name_fixture(path)
+  function! self.path_to_name_testcontroller(...)
   endfunction
-  function! self.path_to_name_shell(path)
+  function! self.path_to_name_testmodel(...)
   endfunction
-  function! self.path_to_name_task(path)
+  function! self.path_to_name_testcomponent(...)
   endfunction
-  function! self.path_to_name_behavior(path)
+  function! self.path_to_name_testbehavior(...)
   endfunction
-  function! self.path_to_name_helper(path)
+  function! self.path_to_name_testhelper(...)
   endfunction
   function! self.path_to_name_theme(path)
   endfunction
@@ -351,8 +431,6 @@ function! cake#factory(path_app)
   function! self.name_to_path_controller(name)
   endfunction
   function! self.name_to_path_model(name)
-  endfunction
-  function! self.name_to_path_component(name)
   endfunction
   function! self.name_to_path_component(name)
   endfunction
@@ -407,22 +485,80 @@ function! cake#factory(path_app)
   endfunction
   function! self.is_task(path)
   endfunction
+
   " }}}
+  function! self.name_to_path_config(name) "{{{
+    return self.paths.configs . a:name . ".php"
+  endfunction "}}}
+
+  function! self.buffer(...) "{{{
+    let buffer = {}
+    let path = (a:0 == 1)? a:1 : expand("%:p")
+
+    if self.is_controller(path)
+      let buffer.type = 'controller'
+      let buffer.name = self.path_to_name_controller(path)
+    elseif self.is_model(path)
+      let buffer.type = 'model'
+      let buffer.name = self.path_to_name_model(path)
+    elseif self.is_view(path)
+      let buffer.type = 'view'
+    elseif self.is_component(path)
+      let buffer.type = 'component'
+      let buffer.name = self.path_to_name_component(path)
+    elseif self.is_behavior(path)
+      let buffer.type = 'behavior'
+      let buffer.name = self.path_to_name_behavior(path)
+    elseif self.is_helper(path)
+      let buffer.type = 'helper'
+      let buffer.name = self.path_to_name_helper(path)
+    elseif self.is_testcontroller(path)
+      let buffer.type = 'testcontroller'
+      let buffer.name = self.path_to_name_testhelper(path)
+    elseif self.is_testmodel(path)
+      let buffer.type = 'testmodel'
+      let buffer.name = self.path_to_name_testmodel(path)
+    elseif self.is_testcomponent(path)
+      let buffer.type = 'testcomponent'
+      let buffer.name = self.path_to_name_testcomponent(path)
+    elseif self.is_testbehavior(path)
+      let buffer.type = 'testbehavior'
+      let buffer.name = self.path_to_name_testbehavior(path)
+    elseif self.is_testhelper(path)
+      let buffer.type = 'testhelper'
+      let buffer.name = self.path_to_name_testhelper(path)
+    elseif self.is_fixture(path)
+      let buffer.type = 'fixture'
+      let buffer.name = self.path_to_name_fixture(path)
+    elseif self.is_shell(path)
+      let buffer.type = 'shell'
+      let buffer.name = self.path_to_name_shell(path)
+    elseif self.is_task(path)
+      let buffer.type = 'task'
+      let buffer.name = self.path_to_name_task(path)
+    else
+      let buffer.type = ''
+    endif
+
+    let buffer.path = path
+    return buffer
+  endfunction "}}}
 
   " Functions: get_dictionary()
   " [object_name : path]
   " ============================================================
-  function! self.get_behaviors() "{{{
+  function! self.get_behaviors(...) "{{{
     let behaviors = {}
+    let is_fullname = (exists('a:1') && (a:1 > 0))? 1 : 0
 
     for path in split(globpath(self.paths.behaviors, "*.php"), "\n")
-      let name = self.path_to_name_behavior(path)
+      let name = self.path_to_name_behavior(path, is_fullname)
       let behaviors[name] = path
     endfor
 
     for build_path in self.get_build_paths('behaviors')
       for path in split(globpath(build_path, "*.php"), "\n")
-        let name = self.path_to_name_behavior(path)
+        let name = self.path_to_name_behavior(path, is_fullname)
         if !has_key(behaviors, name)
           let behaviors[name] = path
         endif
@@ -432,17 +568,18 @@ function! cake#factory(path_app)
 
     return behaviors
   endfunction " }}}
-  function! self.get_components() "{{{
+  function! self.get_components(...) "{{{
     let components = {}
+    let is_fullname = (exists('a:1') && (a:1 > 0))? 1 : 0
 
     for path in split(globpath(self.paths.components, "*.php"), "\n")
-      let name = self.path_to_name_component(path)
+      let name = self.path_to_name_component(path, is_fullname)
       let components[name] = path
     endfor
 
     for build_path in self.get_build_paths('components')
       for path in split(globpath(build_path, "*.php"), "\n")
-        let name = self.path_to_name_component(path)
+        let name = self.path_to_name_component(path, is_fullname)
         if !has_key(components, name)
           let components[name] = path
         endif
@@ -451,17 +588,18 @@ function! cake#factory(path_app)
 
     return components
   endfunction "}}}
-  function! self.get_helpers() "{{{
+  function! self.get_helpers(...) "{{{
     let helpers = {}
+    let is_fullname = (exists('a:1') && (a:1 > 0))? 1 : 0
 
     for path in split(globpath(self.paths.helpers, "*.php"), "\n")
-      let name = self.path_to_name_helper(path)
+      let name = self.path_to_name_helper(path, is_fullname)
       let helpers[name] = path
     endfor
 
     for build_path in self.get_build_paths('helpers')
       for path in split(globpath(build_path, "*.php"), "\n")
-        let name = self.path_to_name_helper(path)
+        let name = self.path_to_name_helper(path, is_fullname)
         if !has_key(helpers, name)
           let helpsers[name] = path
         endif
@@ -470,31 +608,34 @@ function! cake#factory(path_app)
 
     return helpers
   endfunction " }}}
-  function! self.get_shells() "{{{
+  function! self.get_shells(...) "{{{
     let shells = {}
+    let is_fullname = (exists('a:1') && (a:1 > 0))? 1 : 0
 
     for path in split(globpath(self.paths.shells, "*.php"), "\n")
-      let name = self.path_to_name_shell(path)
+      let name = self.path_to_name_shell(path, is_fullname)
       let shells[name] = path
     endfor
 
     return shells
   endfunction " }}}
-    function! self.get_tasks() "{{{
+    function! self.get_tasks(...) "{{{
       let tasks = {}
+      let is_fullname = (exists('a:1') && (a:1 > 0))? 1 : 0
 
       for path in split(globpath(self.paths.tasks, "*.php"), "\n")
-        let name = self.path_to_name_task(path)
+        let name = self.path_to_name_task(path, is_fullname)
         let tasks[name] = path
       endfor
 
       return tasks
     endfunction " }}}
-  function! self.get_fixtures() "{{{
+  function! self.get_fixtures(...) "{{{
     let fixtures = {}
+    let is_fullname = (exists('a:1') && (a:1 > 0))? 1 : 0
 
     for path in split(globpath(self.paths.fixtures, "*.php"), "\n")
-      let name = self.path_to_name_fixture(path)
+      let name = self.path_to_name_fixture(path, is_fullname)
       let fixtures[name] = path
     endfor
 
@@ -602,7 +743,6 @@ function! cake#factory(path_app)
         else
           let pattern = '\(' . self.paths.views . '\)\zs\w\+\ze'
         endif
-        echo pattern
 
         let target = matchstr(path, pattern)
         call add(targets, target)
@@ -623,10 +763,10 @@ function! cake#factory(path_app)
       if !has_key(controllers, target)
 
         " If the file does not exist, ask whether to create a new file.
-        if cake#util#confirm_create_file(self.name_to_path_controller(target))
+        if self.bake('controller', target, {}, 0) || cake#util#confirm_create_file(self.name_to_path_controller(target))
           let controllers[target] = self.name_to_path_controller(target)
         else
-          call cake#util#echo_warning(target . "Controller is not found.")
+          call cake#util#warning(target . "Controller is not found.")
           return
         endif
       endif
@@ -654,7 +794,7 @@ function! cake#factory(path_app)
       if self.is_controller(path)
         " let target = cake#util#singularize(substitute(cake#util#camelize(expand("%:p:t:r")), "Controller$", "", ""))
         call add(targets, cake#util#singularize(substitute(cake#util#camelize(expand("%:p:t:r")), "Controller$", "", "")))
-      elseif self.is_testmodel(path);
+      elseif self.is_testmodel(path)
         " let target = self.path_to_name_testmodel(path)
         call add(targets, self.path_to_name_testmodel(path))
       elseif self.is_fixture(path)
@@ -671,10 +811,10 @@ function! cake#factory(path_app)
       if !has_key(models, target)
 
         " If the file does not exist, ask whether to create a new file.
-        if cake#util#confirm_create_file(self.name_to_path_model(target))
+        if self.bake('model', target, {}, 0) || cake#util#confirm_create_file(self.name_to_path_model(target))
           let models[target] = self.name_to_path_model(target)
         else
-          call cake#util#echo_warning(target . "Model is not found.")
+          call cake#util#warning(target . "Model is not found.")
           return
         endif
       endif
@@ -688,7 +828,7 @@ function! cake#factory(path_app)
     let views = []
 
     if !self.is_controller(expand("%:p"))
-      call cake#util#echo_warning("No Controller in current buffer.")
+      call cake#util#warning("No Controller in current buffer.")
       return
     endif
 
@@ -696,9 +836,12 @@ function! cake#factory(path_app)
     let controller_name = self.path_to_name_controller(expand('%:p'))
 
     " determine view
+    let has_path = 0
     if exists('a:2')
       let view_name = a:2
       if match(view_name, '/') > 0
+        let has_path = 1
+        let origin_view_name = view_name
         let view_name = view_name[strridx(view_name, '/')+1:]
       endif
     else
@@ -748,12 +891,17 @@ function! cake#factory(path_app)
       endfor
     endfor
 
+    if has_path == 1
+      call filter(views, 'v:val =~# "' . origin_view_name . '"')
+    endif
+
+
     let i = len(views)
     if i == 0
       " If the file does not exist, ask whether to create a new file.
       let target_view_path = self.name_to_path_view(controller_name, view_name, theme)
       if !cake#util#confirm_create_file(target_view_path)
-        call cake#util#echo_warning(target_view_path . " is not found.")
+        call cake#util#warning(target_view_path . " is not found.")
         return
       endif
     elseif i == 1
@@ -763,7 +911,7 @@ function! cake#factory(path_app)
       let n = 1
       let tmp_choices = []
       for str in views
-        let str = n . ": " . self.abbreviate(str)
+        let str = n . ": " . self.get_short_path_name(str)
         call add(tmp_choices, str)
         let n = n + 1
       endfor
@@ -797,7 +945,7 @@ function! cake#factory(path_app)
     let view_path = self.name_to_path_view(controller_name, view_name, theme_name)
 
     if !filewritable(view_path)
-      call cake#util#echo_warning(view_path . " is not found.")
+      call cake#util#warning(view_path . " is not found.")
       return
     endif
 
@@ -817,7 +965,7 @@ function! cake#factory(path_app)
         if cake#util#confirm_create_file(self.name_to_path_config(target))
           let configs[target] = self.name_to_path_config(target)
         else
-          call cake#util#echo_warning(target . " is not found.")
+          call cake#util#warning(target . " is not found.")
           return
         endif
       endif
@@ -855,7 +1003,7 @@ function! cake#factory(path_app)
         if cake#util#confirm_create_file(self.name_to_path_component(target))
           let components[target] = self.name_to_path_component(target)
         else
-          call cake#util#echo_warning(target . " is not found.")
+          call cake#util#warning(target . " is not found.")
           return
         endif
       endif
@@ -878,7 +1026,7 @@ function! cake#factory(path_app)
         if cake#util#confirm_create_file(self.name_to_path_shell(target))
           let shells[target] = self.name_to_path_shell(target)
         else
-          call cake#util#echo_warning(target . " is not found.")
+          call cake#util#warning(target . " is not found.")
           return
         endif
       endif
@@ -903,7 +1051,7 @@ function! cake#factory(path_app)
         if cake#util#confirm_create_file(self.name_to_path_task(target))
           let tasks[target] = self.name_to_path_task(target)
         else
-          call cake#util#echo_warning(target . " is not found.")
+          call cake#util#warning(target . " is not found.")
           return
         endif
       endif
@@ -941,7 +1089,7 @@ function! cake#factory(path_app)
         if cake#util#confirm_create_file(self.name_to_path_behavior(target))
           let behaviors[target] = self.name_to_path_behavior(target)
         else
-          call cake#util#echo_warning(target . " is not found.")
+          call cake#util#warning(target . " is not found.")
           return
         endif
       endif
@@ -979,7 +1127,7 @@ function! cake#factory(path_app)
         if cake#util#confirm_create_file(self.name_to_path_helper(target))
           let helpers[target] = self.name_to_path_helper(target)
         else
-          call cake#util#echo_warning(target . " is not found.")
+          call cake#util#warning(target . " is not found.")
           return
         endif
       endif
@@ -1016,10 +1164,10 @@ function! cake#factory(path_app)
 
       if !has_key(testmodels, target)
         " If the file does not exist, ask whether to create a new file.
-        if cake#util#confirm_create_file(self.name_to_path_testmodel(target))
+        if self.bake('testmodel', target, {}, 0) || cake#util#confirm_create_file(self.name_to_path_testmodel(target))
           let testmodels[target] = self.name_to_path_testmodel(target)
         else
-          call cake#util#echo_warning(target . " is not found.")
+          call cake#util#warning(target . " is not found.")
           return
         endif
       endif
@@ -1054,10 +1202,10 @@ function! cake#factory(path_app)
 
       if !has_key(testbehaviors, target)
         " If the file does not exist, ask whether to create a new file.
-        if cake#util#confirm_create_file(self.name_to_path_testbehavior(target))
+        if self.bake('testbehavior', target, {}, 0) || cake#util#confirm_create_file(self.name_to_path_testbehavior(target))
           let testbehaviors[target] = self.name_to_path_testbehavior(target)
         else
-          call cake#util#echo_warning(target . " is not found.")
+          call cake#util#warning(target . " is not found.")
           return
         endif
       endif
@@ -1092,10 +1240,10 @@ function! cake#factory(path_app)
 
       if !has_key(testcomponents, target)
         " If the file does not exist, ask whether to create a new file.
-        if cake#util#confirm_create_file(self.name_to_path_testcomponent(target))
+        if self.bake('testcomponent', target, {}, 0) || cake#util#confirm_create_file(self.name_to_path_testcomponent(target))
           let testcomponents[target] = self.name_to_path_testcomponent(target)
         else
-          call cake#util#echo_warning(target . " is not found.")
+          call cake#util#warning(target . " is not found.")
           return
         endif
       endif
@@ -1130,10 +1278,10 @@ function! cake#factory(path_app)
 
       if !has_key(testcontrollers, target)
         " If the file does not exist, ask whether to create a new file.
-        if cake#util#confirm_create_file(self.name_to_path_testcontroller(target))
+        if self.bake('testcontroller', target, {}, 0) || cake#util#confirm_create_file(self.name_to_path_testcontroller(target))
           let testcontrollers[target] = self.name_to_path_testcontroller(target)
         else
-          call cake#util#echo_warning(target . " is not found.")
+          call cake#util#warning(target . " is not found.")
           return
         endif
       endif
@@ -1168,10 +1316,10 @@ function! cake#factory(path_app)
 
       if !has_key(testhelpers, target)
         " If the file does not exist, ask whether to create a new file.
-        if cake#util#confirm_create_file(self.name_to_path_testhelper(target))
+        if self.bake('testhelper', target, {}, 0) || cake#util#confirm_create_file(self.name_to_path_testhelper(target))
           let testhelpers[target] = self.name_to_path_testhelper(target)
         else
-          call cake#util#echo_warning(target . " is not found.")
+          call cake#util#warning(target . " is not found.")
           return
         endif
       endif
@@ -1246,11 +1394,12 @@ function! cake#factory(path_app)
       let target = cake#util#camelize(target)
 
       if !has_key(fixtures, target)
-        " If the file does not exist, ask whether to create a new file.
-        if cake#util#confirm_create_file(self.name_to_path_fixture(target))
+        if self.bake('fixture', target, {}, 0)
+          let fixtures[target] = self.name_to_path_fixture(target)
+        elseif cake#util#confirm_create_file(self.name_to_path_fixture(target))
           let fixtures[target] = self.name_to_path_fixture(target)
         else
-          call cake#util#echo_warning(target . " is not found.")
+          call cake#util#warning(target . " is not found.")
           return
         endif
       endif
@@ -1269,86 +1418,13 @@ function! cake#factory(path_app)
 
     for target in targets
       if !has_key(libs, target)
-        call cake#util#echo_warning(target . " is not found.")
+        call cake#util#warning(target . " is not found.")
       endif
 
       let line = 0
       call cake#util#open_file(libs[target], split_option, line)
     endfor
 
-  endfunction "}}}
-  function! self.describe_table(...) " {{{
-    if !executable('php')
-      call cake#util#echo_warning('[cake.vim] php is not executable.')
-      return
-    endif
-
-    if !executable('grep')
-      call cake#util#echo_warning('[cake.vim] no grep in $PATH.')
-      return
-    endif
-
-    if !exists("g:loaded_dbext")
-      call cake#util#echo_warning('[cake.vim] dbext.vim is not found.')
-      return
-    endif
-
-    if a:0 > 0
-      let target = a:1
-    else
-      let target = expand('<cword>')
-    endif
-
-    let models = self.get_models()
-
-    if has_key(models, target)
-
-
-      " useDbConfig
-      let cmd = 'grep -E ''^\s*var\s*\$useDbConfig\s*='' ' . self.name_to_path_model(target)
-      let line = system(cmd)
-      let db_config = matchstr(line, '\(var\s\+\$useDbConfig\s*=\s*["'']\)\zs\w\+\ze\(["''];\)')
-      if  db_config == ''
-        let db_config = 'default'
-      endif
-
-      try
-        let config_path = self.paths.configs . 'database.php'
-        let php_code =
-              \ 'require_once("' . config_path . '");' .
-              \ '$ref = new ReflectionClass("DATABASE_CONFIG");
-              \ $DatabaseConfig = $ref->newInstance();
-              \ $config = "' . db_config . '";
-              \ $con = $DatabaseConfig->$config;
-              \ $user = $con["login"];
-              \ $password = $con["password"];
-              \ $host = $con["host"];
-              \ $dbname = $con["database"];
-              \ echo sprintf("{\"user\":\"%s\", \"password\":\"%s\", \"host\":\"%s\", \"dbname\":\"%s\"}", $con["login"], $con["password"], $con["host"], $con["database"]);'
-
-        let cmd = 'php -r ''' . php_code . ''''
-        let params = system(cmd)
-        let p = eval(params)
-
-        let options = 'type=' . g:cakephp_db_type . ':user=' . p.user . ':passwd=' . p.password . ':dbname=' . p.dbname . ':host=' . p.host . ':port=' . g:cakephp_db_port . ':buffer_lines=' . g:cakephp_db_buffer_lines
-        call dbext#DB_setMultipleOptions(options)
-
-        " useTable
-        let cmd = 'grep -E ''^\s*var\s*\$useTable\s*='' ' . self.name_to_path_model(target)
-        let line = system(cmd)
-        let table = matchstr(line, '\(var\s\+\$useTable\s*=\s*["'']\)\zs\w\+\ze\(["''];\)')
-        if table == ''
-          let table = cake#util#pluralize(cake#util#decamelize(target))
-        endif
-
-        call dbext#DB_describeTable(table)
-
-      catch
-        call cake#util#echo_warning("[cake.vim] Can't connect to Database. Please check database.php and $useDbConfig.")
-        return
-      endtry
-
-    endif
   endfunction "}}}
   function! self.smart_jump(...) "{{{
     let option = a:1
@@ -1357,6 +1433,10 @@ function! cake#factory(path_app)
     let word = expand('<cword>')
     let l_word = expand('<cWORD>')
     let libs = {}
+
+    if cake#util#in_array('-', split(&iskeyword, ','))
+      let word = substitute(word, "-*$", "", "")
+    endif
 
     if strlen(word) == 0
       return
@@ -1639,12 +1719,12 @@ function! cake#factory(path_app)
     " }}}
     " in TestModel "{{{
     if self.is_testmodel(path)
-      " TestModel -> Fixture or Model
-      if self.is_fixture(self.name_to_path_fixture(word))
-        call self.jump_fixture(option, word)
-        return
-      elseif self.is_model(self.name_to_path_model(word)) || self.in_build_path_model(word)
+      " TestModel -> Model or Fixture
+      if self.is_model(self.name_to_path_model(word)) || self.in_build_path_model(word)
         call self.jump_model(option, word)
+        return
+      elseif self.is_fixture(self.name_to_path_fixture(word))
+        call self.jump_fixture(option, word)
         return
       endif
     endif
@@ -1806,7 +1886,10 @@ function! cake#factory(path_app)
   function! self.smart_jump_script(script_name, option) "{{{
     let scripts = []
 
+    let has_path = 0
     if match(a:script_name, '/') > 0
+      let has_path = 1
+      let origin_script_name = a:script_name
       let script_dir = 'webroot/js/' . a:script_name[:strridx(a:script_name, '/')]
       let script_name = a:script_name[strridx(a:script_name, '/')+1:]
     else
@@ -1832,6 +1915,9 @@ function! cake#factory(path_app)
       endfor
     endfor
 
+    if has_path == 1
+      call filter(scripts, 'v:val =~# "' . origin_script_name . '"')
+    endif
 
     let i = len(scripts)
     if i == 0
@@ -1843,7 +1929,7 @@ function! cake#factory(path_app)
       let n = 1
       let tmp_choices = []
       for str in scripts
-        let str = n . ": " . self.abbreviate(str)
+        let str = n . ": " . self.get_short_path_name(str)
         call add(tmp_choices, str)
         let n = n + 1
       endfor
@@ -1862,7 +1948,10 @@ function! cake#factory(path_app)
   function! self.smart_jump_stylesheet(stylesheet_name, option) "{{{
     let stylesheets = []
 
+    let has_path = 0
     if match(a:stylesheet_name, '/') > 0
+      let has_path = 1
+      let origin_stylesheet_name = a:stylesheet_name
       let stylesheet_dir = 'webroot/css/' . a:stylesheet_name[:strridx(a:stylesheet_name, '/')]
       let stylesheet_name = a:stylesheet_name[strridx(a:stylesheet_name, '/')+1:]
     else
@@ -1888,6 +1977,10 @@ function! cake#factory(path_app)
       endfor
     endfor
 
+    if has_path == 1
+      call filter(stylesheets, 'v:val =~# "' . origin_stylesheet_name . '"')
+    endif
+
     let i = len(stylesheets)
     if i == 0
       return
@@ -1898,7 +1991,7 @@ function! cake#factory(path_app)
       let n = 1
       let tmp_choices = []
       for str in stylesheets
-        let str = n . ": " . self.abbreviate(str)
+        let str = n . ": " . self.get_short_path_name(str)
         call add(tmp_choices, str)
         let n = n + 1
       endfor
@@ -1917,7 +2010,10 @@ function! cake#factory(path_app)
   function! self.smart_jump_element(element_name, option) "{{{
     let elements = []
 
+    let has_path = 0
     if match(a:element_name, '/') > 0
+      let has_path = 1
+      let origin_element_name = a:element_name
       let element_dir = self.vars.element_dir . a:element_name[:strridx(a:element_name, '/')]
       let element_name = a:element_name[strridx(a:element_name, '/')+1:]
     else
@@ -1943,6 +2039,9 @@ function! cake#factory(path_app)
       endfor
     endfor
 
+    if has_path == 1
+      call filter(elements, 'v:val =~# "' . origin_element_name . '"')
+    endif
 
     let i = len(elements)
     if i == 0
@@ -1954,7 +2053,7 @@ function! cake#factory(path_app)
       let n = 1
       let tmp_choices = []
       for str in elements
-        let str = n . ": " . self.abbreviate(str)
+        let str = n . ": " . self.get_short_path_name(str)
         call add(tmp_choices, str)
         let n = n + 1
       endfor
@@ -2008,7 +2107,7 @@ function! cake#factory(path_app)
       let n = 1
       let tmp_choices = []
       for str in layouts
-        let str = n . ": " . self.abbreviate(str)
+        let str = n . ": " . self.get_short_path_name(str)
         call add(tmp_choices, str)
         let n = n + 1
       endfor
@@ -2035,8 +2134,174 @@ function! cake#factory(path_app)
   endfunction "}}}
   " ============================================================
 
+  " Functions: dbext.vim interface
+  " ============================================================
+  function! self.is_ready_dbext() "{{{
+    if !executable('php')
+      call cake#util#warning('[cake.vim] php is not executable.')
+      return 0
+    endif
+
+    if !executable('grep')
+      call cake#util#warning('[cake.vim] no grep in $PATH.')
+      return 0
+    endif
+
+    if !exists("g:loaded_dbext")
+      call cake#util#warning('[cake.vim] dbext.vim is not found.')
+      return 0
+    endif
+
+    return 1
+  endfunction "}}}
+  function! self.connect_database(...) "{{{
+    if !self.is_ready_dbext()
+      return
+    endif
+
+    let target = a:1
+    let models = self.get_models()
+
+    if has_key(models, target)
+      " useDbConfig
+      let cmd = 'grep -E ''^\s*var\s*\$useDbConfig\s*='' ' . self.name_to_path_model(target)
+      let line = system(cmd)
+      let db_config = matchstr(line, '\(var\s\+\$useDbConfig\s*=\s*["'']\)\zs\w\+\ze\(["''];\)')
+      if  db_config == ''
+        let db_config = 'default'
+      endif
+
+      try
+        let config_path = self.paths.configs . 'database.php'
+        let php_code =
+              \ 'require_once("' . config_path . '");' .
+              \ '$ref = new ReflectionClass("DATABASE_CONFIG");
+              \ $DatabaseConfig = $ref->newInstance();
+              \ $config = "' . db_config . '";
+              \ $con = $DatabaseConfig->$config;
+              \ $user = $con["login"];
+              \ $password = $con["password"];
+              \ $host = $con["host"];
+              \ $dbname = $con["database"];
+              \ echo sprintf("{\"user\":\"%s\", \"password\":\"%s\", \"host\":\"%s\", \"dbname\":\"%s\"}", $con["login"], $con["password"], $con["host"], $con["database"]);'
+
+        let cmd = 'php -r ''' . php_code . ''''
+        let params = system(cmd)
+        let p = eval(params)
+
+        let options = 'type=' . g:cakephp_db_type . ':user=' . p.user . ':passwd=' . p.password . ':dbname=' . p.dbname . ':host=' . p.host . ':port=' . g:cakephp_db_port . ':buffer_lines=' . g:cakephp_db_buffer_lines
+        call dbext#DB_setMultipleOptions(options)
+        return 1
+      catch
+        call cake#util#warning("[cake.vim] Can't connect to Database. Please check database.php and $useDbConfig.")
+      endtry
+
+      return 0
+  endfunction "}}}
+  function! self.describe_table(...) " {{{
+    if a:0 > 0
+      let target = a:1
+    else
+      let target = expand('<cword>')
+    endif
+
+    if !self.connect_database(target)
+      return
+    endif
+
+    try
+      " useTable
+      let cmd = 'grep -E ''^\s*var\s*\$useTable\s*='' ' . self.name_to_path_model(target)
+      let line = system(cmd)
+      let table = matchstr(line, '\(var\s\+\$useTable\s*=\s*["'']\)\zs\w\+\ze\(["''];\)')
+      if table == ''
+        let table = cake#util#pluralize(cake#util#decamelize(target))
+      endif
+
+      call dbext#DB_describeTable(table)
+
+    catch
+      call cake#util#warning("[cake.vim] Can't connect to Database. Please check database.php and $useDbConfig.")
+      return
+    endtry
+
+  endfunction "}}}
+  " ============================================================
+
+  " Functions: quickrun interface
+  " ============================================================
+  " Currentry, only CakePHP1.3
+  function! self.quickrun() range "{{{
+    let range = a:firstline . ',' . a:lastline
+    let tmp = @@
+    silent exec range . 'yank'
+    let src = @@
+    let @@ = tmp
+
+    let models  = self.get_models()
+    let helpers = self.get_helpers()
+    let libs    = self.get_libs()
+
+    let _pre = ''
+    let _src = ''
+    " replace $this
+    for line in split(src, "\n")
+      let new_object = ''
+      let path = expand("%:p")
+      " in Controller
+      if self.is_controller(path)
+        let object = matchstr(line, '\(\$this->\)\zs\u\a\+\ze')
+        if strlen(object)
+          " Model?
+          if has_key(models, object)
+            " replace
+            let line = substitute(line, '$this->' . object, 'ClassRegistry::init("' . object . '")', "")
+          endif
+        endif
+      " in Model
+      elseif self.is_model(path)
+        let object = self.path_to_name_model(path)
+        let line = substitute(line, '$this', 'ClassRegistry::init("' . object . '")', "")
+      " in View
+      elseif self.is_view(path)
+        let object = matchstr(line, '\(\$this->\)\zs\u\a\+\ze')
+        if strlen(object)
+          " Helper?
+          if has_key(helpers, object . 'Helper') || has_key(libs, object . 'Helper')
+            let _pre = _pre . 'App::import("Helper", "' . object . '"); $' . object . ' = new ' . object . 'Helper(); '
+            " replace
+            let line = substitute(line, '$this->' . object, '$' . object, "")
+          endif
+        endif
+      endif
+
+      let _src = _src . line
+    endfor
+
+    let src = _pre . _src
+
+    let php_code = '<?php'
+    let php_code = php_code . ' $_GET["url"] = "favicon.ico";'
+    let php_code = php_code . ' require_once "' . self.paths.app . 'webroot/index.php";'
+    let php_code = php_code . ' ' . src
+    let php_code = php_code . ' ?>'
+
+    " echo php_code
+    call quickrun#run({'type' : 'php', 'src' : php_code})
+    " call quickrun#run({'type' : 'php', 'runner' : 'vimproc', 'src' : php_code})
+  endfunction "}}}
+  " ============================================================
+
   " Functions: in_build_path_xxx()
   " ============================================================
+  function! self.get_build_paths(name) "{{{
+    let paths = []
+    let app_config = cake#util#eval_json_file(self.paths.app . g:cakephp_app_config_file)
+    if has_key(app_config, 'build_path') && has_key(app_config.build_path, a:name)
+      let paths = app_config.build_path[a:name]
+    endif
+    return paths
+  endfunction "}}}
   function! self.in_build_path_model(name) "{{{
     for build_path in self.get_build_paths('models')
       for path in split(globpath(build_path, "*.php"), "\n")
@@ -2084,8 +2349,8 @@ function! cake#factory(path_app)
   function! self.get_line_in_controller(controller_name, action_name) "{{{
     let line = 0
 
-    if a:action_name != ''
-      let cmd = 'grep -n -E "^\s*function\s*' . a:action_name . '\s*\(" ' . self.name_to_path_controller(a:controller_name) . ' | cut -f 1'
+    if executable('grep') && a:action_name != ''
+      let cmd = 'grep -n -E "^\s*(public)?\s*function\s*' . a:action_name . '\s*\(" ' . self.name_to_path_controller(a:controller_name) . ' | cut -f 1'
       " Extract line number from grep result.
       let n = matchstr(system(cmd), '\(^\d\+\)')
       if strlen(n) > 0
@@ -2094,6 +2359,14 @@ function! cake#factory(path_app)
     endif
 
     return line
+  endfunction "}}}
+  function! self.get_viewtheme(view_path) " {{{
+    let theme = ''
+    " View in now a theme?
+    if self.in_theme(a:view_path)
+      let theme = cake#util#get_topdir(a:view_path[strlen(self.paths.themes):])
+    endif
+    return theme
   endfunction "}}}
   function! self.args_to_targets(args) "{{{
     let targets = []
@@ -2105,14 +2378,11 @@ function! cake#factory(path_app)
     endfor
     return targets
   endfunction "}}}
-  function! self.abbreviate(path) "{{{
+  function! self.get_short_path_name(path) "{{{
     if self.is_view(a:path)
       return substitute(a:path, self.paths.views, "", "")
     endif
     return a:path
-  endfunction "}}}
-  function! self.show_cakephp_app() "{{{
-    echo '[cake.vim] ' . self.paths.app
   endfunction "}}}
   function! self.set_log(log) "{{{
     " default settings of log.
@@ -2124,12 +2394,9 @@ function! cake#factory(path_app)
       let a:log['error'] = self.paths.app . "tmp/logs/error.log"
     endif
   endfunction "}}}
-  function! self.name_to_path_config(name) "{{{
-    return self.paths.configs . a:name . ".php"
-  endfunction "}}}
   function! self.tail_log(log_name) "{{{
     if !has_key(g:cakephp_log, a:log_name)
-      call cake#util#echo_warning(a:log_name . " is not found. please set g:cakephp_log['" . a:log_name . "'] = '/path/to/log_name.log'.")
+      call cake#util#warning(a:log_name . " is not found. please set g:cakephp_log['" . a:log_name . "'] = '/path/to/log_name.log'.")
       return
     endif
 
@@ -2140,14 +2407,6 @@ function! cake#factory(path_app)
       return 1
     endif
     return 0
-  endfunction "}}}
-  function! self.get_viewtheme(view_path) " {{{
-    let theme = ''
-    " View in now a theme?
-    if self.in_theme(a:view_path)
-      let theme = cake#util#get_topdir(a:view_path[strlen(self.paths.themes):])
-    endif
-    return theme
   endfunction "}}}
   function! self.clip_element(bang, ...) range "{{{
     let range = a:firstline . ',' . a:lastline
@@ -2171,14 +2430,14 @@ function! cake#factory(path_app)
 
 
     if filereadable(output_file) && !a:bang
-      call cake#util#echo_warning(output_file . ' already exists.(add ! to override)')
+      call cake#util#warning(output_file . ' already exists.(add ! to override)')
       return
     endif
     if !isdirectory(fnamemodify(output_file, ':h'))
       if a:bang
         call mkdir(fnamemodify(output_file, ':h'), 'p')
       else
-        call cake#util#echo_warning(fnamemodify(output_file, ':h') . ' is not such directory.(add ! to make directory.)')
+        call cake#util#warning(fnamemodify(output_file, ':h') . ' is not such directory.(add ! to make directory.)')
         return
       endif
     endif
@@ -2195,13 +2454,124 @@ function! cake#factory(path_app)
     echo 'Save Element: '. output_file
 
   endfunction "}}}
-  function! self.get_build_paths(name) "{{{
-    let paths = []
-    let app_config = cake#util#eval_json_file(self.paths.app . g:cakephp_app_config_file)
-    if has_key(app_config, 'build_path') && has_key(app_config.build_path, a:name)
-      let paths = app_config.build_path[a:name]
+  function! self.bake(type, name, option, force) "{{{
+    if empty(a:type) || empty(a:name)
+      return 0
     endif
-    return paths
+
+    let path = call(get(g:cake, 'name_to_path_' . a:type), [a:name], g:cake)
+    let full_name = call(get(g:cake, 'path_to_name_' . a:type), [path, 1], g:cake)
+
+    if !a:force
+      let choice = confirm("Bake " . full_name . " ?", "&Yes\n&No", 1)
+      if choice != 1
+        return 0
+      endif
+    endif
+
+    if filereadable(path)
+      let ftime_before = getftime(path)
+    else
+      let ftime_before = -1
+    endif
+    let option = ''
+    if isdirectory(a:option)
+      for v in items(a:option)
+        let option .= v[0] . ' ' . v[1]
+      endfor
+    elseif strlen(a:option) > 0
+      let option = a:option
+    endif
+
+    if matchstr(a:type, '^test') == 'test'
+      let type_main = 'test'
+      let type_sub = a:type[len('test'):]
+    else
+      let type_main = a:type
+      let type_sub = ''
+    endif
+
+    let cmd  = printf('%scake bake %s %s %s %s -app %s', self.paths.cores.console, type_main, type_sub, a:name, option, self.paths.app)
+    execute ':!' .cmd
+
+    if ftime_before == getftime(path)
+      return 0
+    else
+      return 1
+    endif
+  endfunction "}}}
+  function! self.bake_interactive(...) "{{{
+    let cmd  = printf('%scake bake %s -app %s', self.paths.cores.console, join(a:000, ' '), self.paths.app)
+    execute ':!' .cmd
+  endfunction "}}}
+  function! self.test(path) "{{{
+    let buffer = self.buffer(a:path)
+
+    let test_path = ''
+    if cake#util#in_array(buffer.type, ['model', 'controller', 'component', 'behavior', 'helper'])
+      let Fn_get_path = get(self, 'name_to_path_test' . buffer.type)
+      let test_path = call(Fn_get_path, [buffer.name], self)
+      let Fn_get_name = get(self, 'path_to_name_test' . buffer.type)
+      let test_name = call(Fn_get_name, [test_path], self)
+    else
+      let test_path = a:path
+      let test_name = self.buffer(test_path).name
+    endif
+
+    if !filereadable(test_path)
+      return 0
+    endif
+
+    let test_command = ''
+
+    " app case
+    if finddir(self.paths.testcases, escape(test_path, ' \') . ';') == self.paths.testcases
+
+      let dir = cake#util#get_topdir(substitute(test_path, self.paths.testcases, '', ''))
+
+      let cakephp_version = cake#version()
+      if cakephp_version < 1.4
+        let test_command = 'testsuite app case ' . dir . '/' . test_name
+      elseif cakephp_version < 2.1
+        let test_command = 'testsuite app ' . dir . '/' . test_name
+      elseif cakephp_version >= 2.1
+        let test_command = 'test app ' . dir . '/' . test_name
+      endif
+
+    endif
+
+    if !strlen(test_command)
+      return 0
+    endif
+
+    let cmd  = printf('%scake %s -app %s', self.paths.cores.console, test_command, self.paths.app)
+    echo cmd
+
+    if exists("g:loaded_vimproc")
+      let sub = vimproc#popen2(cmd)
+      let res = ''
+      while !sub.stdout.eof
+        let res .= sub.stdout.read()
+      endwhile
+      let [cond, status] = sub.waitpid()
+      new
+      silent resize  10
+      setlocal buftype=nofile
+      setlocal bufhidden=hide
+      setlocal noswapfile
+      setlocal noreadonly
+      nnoremap <buffer> <silent> q :bdelete<CR>
+      call append(0, split(res, '\r\n\|\r\|\n') + [string([cond, status])])
+      " let r = vimproc#system_bg(cmd)
+      " let r = vimproc#get_last_status()
+      echo 'Press "q" to close buffer.'
+    else
+      let res = system(cmd)
+      echo res
+    endif
+
+    return 1
+
   endfunction "}}}
   " ============================================================
 
