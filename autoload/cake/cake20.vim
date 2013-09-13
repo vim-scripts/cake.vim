@@ -15,6 +15,7 @@ function! cake#cake20#factory(path_app)
         \ 'app'             : a:path_app,
         \ 'controllers'     : a:path_app . "Controller/",
         \ 'components'      : a:path_app . "Controller/Component/",
+        \ 'libs'            : a:path_app . 'Lib/',
         \ 'models'          : a:path_app . "Model/",
         \ 'behaviors'       : a:path_app . "Model/Behavior/",
         \ 'views'           : a:path_app . "View/",
@@ -69,8 +70,8 @@ function! cake#cake20#factory(path_app)
   " Functions: self.get_dictionary()
   " [object_name : path]
   " ============================================================
-  function! self.get_libs() "{{{
-    let libs = {}
+  function! self.get_cores() "{{{
+    let cores = {}
 
     let directories = [
           \ 'Cache',
@@ -78,11 +79,14 @@ function! cake#cake20#factory(path_app)
           \ 'Controller',
           \ 'Core',
           \ 'Error',
+          \ 'Event',
           \ 'I18n',
           \ 'Log',
           \ 'Model',
           \ 'Network',
           \ 'Routing',
+          \ 'Test',
+          \ 'TestSuite',
           \ 'Utility',
           \ 'View',
           \ ]
@@ -90,7 +94,7 @@ function! cake#cake20#factory(path_app)
     for dir in directories
       for path in split(globpath(self.paths.cores.lib . dir,  "**/*\.php"), "\n")
         let name = fnamemodify(path, ":t:r")
-        let libs[name] = path
+        let cores[name] = path
       endfor
     endfor
 
@@ -100,10 +104,10 @@ function! cake#cake20#factory(path_app)
       if name ==# 'cake' || match(path, '/Console/Templates/') > 0
         continue
       endif
-      let libs[name] = path
+      let cores[name] = path
     endfor
 
-    return libs
+    return cores
   endfunction "}}}
 
   function! self.get_controllers(...) "{{{
@@ -469,7 +473,79 @@ function! cake#cake20#factory(path_app)
     endif
     return 0
   endfunction "}}}
+  function! self.is_lib(path) "{{{
+    if filereadable(a:path) && match(a:path, self.paths.libs) != -1 && fnamemodify(a:path, ":e") == "php"
+      return 1
+    endif
+    return 0
+  endfunction "}}}
   " ============================================================
+
+  function! self.build_test_command(...) "{{{
+    let path = a:1
+    let filter = ''
+    if a:0 >= 2
+      let filter = a:2
+    endif
+
+    let cmd = {}
+    let buffer = self.buffer(path)
+
+    let test_path = ''
+    let test_name = ''
+    if buffer.type == 'fixture'
+      let test_path = self.name_to_path_testmodel(buffer.name)
+      let test_name = buffer.name
+    elseif cake#util#in_array(buffer.type, ['model', 'controller', 'component', 'behavior', 'helper'])
+      let Fnction = get(self, 'name_to_path_test' . buffer.type)
+      let test_path = call(Fnction, [buffer.name], self)
+      let test_name = buffer.full_name
+    elseif cake#util#in_array(buffer.type, ['testmodel', 'testcontroller', 'testcomponent', 'testbehavior', 'testhelper'])
+      let test_path = path
+      let Fnction = get(self, 'name_to_path_' . buffer.type[strlen('test'):])
+      let alt_path = call(Fnction, [buffer.name], self)
+      let Fnction = get(self, 'path_to_name_' . buffer.type[strlen('test'):])
+      let test_name = call(Fnction, [alt_path, 1], self)
+    endif
+
+    if !filereadable(test_path)
+      call cake#util#warning(printf("[cake.vim] Not found : %s", test_path))
+      return cmd
+    endif
+
+    let shell = ''
+    " app case
+    if finddir(self.paths.testcases, escape(test_path, ' \') . ';') == self.paths.testcases
+
+      let dir = cake#util#get_topdir(substitute(test_path, self.paths.testcases, '', ''))
+
+      let cakephp_version = cake#version()
+      if stridx(cakephp_version, '.') > 0
+        let cakephp_version = matchstr(cakephp_version, '\d\+\.\d\+')
+      endif
+      let v = str2float(cakephp_version)
+      if v < 2.1
+        let shell = 'testsuite app ' . dir . '/' . test_name
+      elseif v >= 2.1
+        let shell = 'test app ' . dir . '/' . test_name
+      endif
+
+    endif
+
+    if !strlen(shell)
+      return cmd
+    endif
+
+    if strlen(filter) > 0
+      let cmd.external = printf('%scake %s -app %s --filter %s', self.paths.cores.console, shell, self.paths.app, filter)
+    else
+      let cmd.external = printf('%scake %s -app %s', self.paths.cores.console, shell, self.paths.app)
+    endif
+
+    let cmd.async = cmd.external . ' --no-colors'
+
+    return cmd
+  endfunction "}}}
 
   return self
 endfunction

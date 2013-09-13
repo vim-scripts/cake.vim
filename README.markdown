@@ -51,7 +51,8 @@ No arguments : If you do not specify arguments, guess depending on the type of t
 | Helper |`:Chelper {helper-name}` | ok | HelperTestCase |
 | Shell |`:Cshell {shell-name}` | ok ||
 | Task |`:Ctask {task-name}` | ok ||
-| Cake Core Library |`:CLib {lib-name}` | ok ||
+| Cake Core library |`:Ccore {core-name}` | ok ||
+| 1st party library |`:Clib {lib-name}` | ok ||
 | Log File (like `tail -f`)|`:Clog {log-name}`  (See `g:cakephp_log`)|||
 | Fixture |`:Cfixture {fixture-name}` | ok | Model|
 | TestController |`:Ctestcontroller {controller-name}`| ok | Controller |
@@ -123,7 +124,8 @@ array('controller' => 'Hoge', 'action' => 'fuga', 'admin' => true)
 - If [dbext.vim](http://www.vim.org/scripts/script.php?script_id=356) is installed, you can see the table definition of the model, `:Cdesc {model-name}`. If you do not specify an argument, the word under the cursor can be specified.
 - `:Celement {element-name}` Cut out as an element the selected range. `:help :Celement`
 - `:Cbake [{target}]` Run bake command interactively. `:help :Cbake`
-- `:Ctestrun` Run test case command, guess depending on the type of the current buffer.
+- `:Ctestrun [{testmethod}]` Run test case command, guess depending on the type of the current buffer.
+- `:Ctestrunmethod` Run the test method of the current line.
 
 ## unite-sources
 - cake.vim is compatible with [unite.vim](https://github.com/Shougo/unite.vim).
@@ -141,4 +143,5 @@ array('controller' => 'Hoge', 'action' => 'fuga', 'admin' => true)
 |Shell|cake_shell|
 |Task|cake_task|
 |Fixture|cake_fixture|
-|Cake Core Library |cake_lib|
+|Cake Core library |cake_core|
+|1st party library |cake_lib|

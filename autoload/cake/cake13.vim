@@ -15,6 +15,7 @@ function! cake#cake13#factory(path_app)
         \ 'app'             : a:path_app,
         \ 'controllers'     : a:path_app . 'controllers/',
         \ 'components'      : a:path_app . 'controllers/components/',
+        \ 'libs'            : a:path_app . 'libs/',
         \ 'models'          : a:path_app . 'models/',
         \ 'behaviors'       : a:path_app . 'models/behaviors/',
         \ 'views'           : a:path_app . 'views/',
@@ -69,38 +70,38 @@ function! cake#cake13#factory(path_app)
   " Functions: self.get_dictionary()
   " [object_name : path]
   " ============================================================
-  function! self.get_libs() "{{{
-    let libs = {}
+  function! self.get_cores() "{{{
+    let cores = {}
 
     " dispatcher
-    let libs['Dispatcher'] = self.paths.cores.core . 'dispatcher.php'
+    let cores['Dispatcher'] = self.paths.cores.core . 'dispatcher.php'
 
-    " libs
+    " cores
     for path in split(globpath(self.paths.cores.lib, "*\.php"), "\n")
       let name = cake#util#camelize(fnamemodify(path, ":t:r"))
-      let libs[name] = path
+      let cores[name] = path
     endfor
-    " libs/cache
+    " cores/cache
     for path in split(globpath(self.paths.cores.lib . 'cache/', "*\.php"), "\n")
       let name = cake#util#camelize(fnamemodify(path, ":t:r")) . 'Engine'
-      let libs[name] = path
+      let cores[name] = path
     endfor
-    " libs/controller
+    " cores/controller
     for path in split(globpath(self.paths.cores.controllers, "*\.php"), "\n")
         let name = cake#util#camelize(fnamemodify(path, ":t:r"))
-      let libs[name] = path
+      let cores[name] = path
     endfor
-    " libs/controller/components
+    " cores/controller/components
     for path in split(globpath(self.paths.cores.components, "*\.php"), "\n")
       let name = cake#util#camelize(fnamemodify(path, ":t:r")) . 'Component'
-      let libs[name] = path
+      let cores[name] = path
     endfor
-    " libs/log
+    " cores/log
     for path in split(globpath(self.paths.cores.lib . 'log/', "*\.php"), "\n")
       let name = cake#util#camelize(fnamemodify(path, ":t:r"))
-      let libs[name] = path
+      let cores[name] = path
     endfor
-    " libs/model
+    " cores/model
     for path in split(globpath(self.paths.cores.models, "*\.php"), "\n")
       if fnamemodify(path, ":t:r") == 'db_acl'
         let name = 'AclNode'
@@ -108,24 +109,24 @@ function! cake#cake13#factory(path_app)
         let name = cake#util#camelize(fnamemodify(path, ":t:r"))
       endif
 
-      let libs[name] = path
+      let cores[name] = path
     endfor
-    " libs/model/behaviors
+    " cores/model/behaviors
     for path in split(globpath(self.paths.cores.behaviors, "*\.php"), "\n")
       let name = cake#util#camelize(fnamemodify(path, ":t:r")) . 'Behavior'
-      let libs[name] = path
+      let cores[name] = path
     endfor
-    " libs/model/datasources/*
+    " cores/model/datasources/*
     for path in split(globpath(self.paths.cores.models . 'datasources/', "**/*\.php"), "\n")
       let name = cake#util#camelize(fnamemodify(path, ":t:r"))
-      let libs[name] = path
+      let cores[name] = path
     endfor
-    " libs/model/view
-    let libs['Helper']    = self.paths.cores.lib . 'view/helper.php'
-    let libs['MediaView'] = self.paths.cores.lib . 'view/media.php'
-    let libs['ThemeView'] = self.paths.cores.lib . 'view/theme.php'
-    let libs['View']      = self.paths.cores.lib . 'view/view.php'
-    " libs/model/view/helpers
+    " cores/model/view
+    let cores['Helper']    = self.paths.cores.lib . 'view/helper.php'
+    let cores['MediaView'] = self.paths.cores.lib . 'view/media.php'
+    let cores['ThemeView'] = self.paths.cores.lib . 'view/theme.php'
+    let cores['View']      = self.paths.cores.lib . 'view/view.php'
+    " cores/model/view/helpers
     for path in split(globpath(self.paths.cores.helpers, "*\.php"), "\n")
       if fnamemodify(path, ":t:r") == 'app_helper'
         let name = cake#util#camelize(fnamemodify(path, ":t:r"))
@@ -133,7 +134,7 @@ function! cake#cake13#factory(path_app)
         let name = cake#util#camelize(fnamemodify(path, ":t:r")) . 'Helper'
       endif
 
-      let libs[name] = path
+      let cores[name] = path
     endfor
     " console/libs/
     for path in split(globpath(self.paths.cores.shells, "*\.php"), "\n")
@@ -142,15 +143,15 @@ function! cake#cake13#factory(path_app)
       else
         let name = cake#util#camelize(fnamemodify(path, ":t:r")) . 'Shell'
       endif
-      let libs[name] = path
+      let cores[name] = path
     endfor
-    " console/libs/tasks
+    " console/cores/tasks
     for path in split(globpath(self.paths.cores.tasks, "*\.php"), "\n")
       let name = cake#util#camelize(fnamemodify(path, ":t:r")) . 'Task'
-      let libs[name] = path
+      let cores[name] = path
     endfor
 
-    return libs
+    return cores
   endfunction "}}}
   function! self.get_controllers(...) "{{{
     let controllers = {}
@@ -517,8 +518,50 @@ function! cake#cake13#factory(path_app)
     endif
     return 0
   endfunction "}}}
+  function! self.is_lib(path) "{{{
+    if filereadable(a:path) && match(a:path, self.paths.libs) != -1 && fnamemodify(a:path, ":e") == "php"
+      return 1
+    endif
+    return 0
+  endfunction "}}}
   " ============================================================
 
+  function! self.build_test_command(...) " {{{
+    let path = a:1
+    let cmd = ''
+
+    let buffer = self.buffer(path)
+
+    let test_path = ''
+    if cake#util#in_array(buffer.type, ['model', 'fixture', 'controller', 'component', 'behavior', 'helper'])
+      let Fnction = get(self, 'name_to_path_test' . buffer.type)
+      let test_path = call(Fnction, [buffer.name], self)
+      let Fnction = get(self, 'path_to_name_test' . buffer.type)
+      let test_name = call(Fnction, [test_path], self)
+    else
+      let test_path = path
+      let test_name = self.buffer(test_path).name
+    endif
+
+    if !filereadable(test_path)
+      call cake#util#warning(printf("[cake.vim] Not found : %s", test_path))
+      return cmd
+    endif
+
+    let shell = ''
+    " app case
+    if finddir(self.paths.testcases, escape(test_path, ' \') . ';') == self.paths.testcases
+      let dir = cake#util#get_topdir(substitute(test_path, self.paths.testcases, '', ''))
+      let shell = 'testsuite app case ' . dir . '/' . test_name
+    endif
+
+    if !strlen(shell)
+      return cmd
+    endif
+
+    let cmd = printf('%scake %s -app %s', self.paths.cores.console, shell, self.paths.app)
+    return cmd
+  endfunction " }}}
 
   return self
 endfunction

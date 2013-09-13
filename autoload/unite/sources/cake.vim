@@ -311,11 +311,37 @@ function! s:unite_source_task.gather_candidates(args, context)
   return candidates
 endfunction
 " }}}
+" UniteSource: cake_core "{{{
+" ============================================================
+let s:unite_source_core = {
+      \ 'name' : 'cake_core',
+      \ 'description' : 'CakePHP Core Libraries',
+      \ }
+
+function! s:unite_source_core.gather_candidates(args, context)
+  let candidates = []
+
+  try
+    for i in items(g:cake.get_cores())
+      call add(candidates, {
+            \ 'word' : i[0],
+            \ 'kind' : 'file',
+            \ 'source' : 'cake_core',
+            \ 'action__path' : i[1],
+            \ 'action__directory' : fnamemodify(i[1],":p:h"),
+            \ })
+    endfor
+  catch
+  endtry
+
+  return candidates
+endfunction
+" }}}
 " UniteSource: cake_lib "{{{
 " ============================================================
 let s:unite_source_lib = {
       \ 'name' : 'cake_lib',
-      \ 'description' : 'CakePHP Libs',
+      \ 'description' : 'CakePHP 1st party Libraries',
       \ }
 
 function! s:unite_source_lib.gather_candidates(args, context)
@@ -350,7 +376,8 @@ function! unite#sources#cake#define() "{{{
         \ s:unite_source_fixture,
         \ s:unite_source_shell,
         \ s:unite_source_task,
-        \ s:unite_source_lib
+        \ s:unite_source_core,
+        \ s:unite_source_lib,
         \ ]
 
   return sources

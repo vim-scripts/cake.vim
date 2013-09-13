@@ -7,7 +7,7 @@ set cpo&vim
 
 let g:cake = {}
 
-" SECTION: Script Variables {{{
+" SECTION: Script Local {{{
 " ============================================================
 let s:cache_last_app_path = ''
 let s:is_initialized = 0
@@ -18,8 +18,8 @@ function! cake#info() "{{{
     let app     = g:cake.paths.app
     let core    = g:cake.paths.cores.core
     let cakephp = cake#version()
-    let buffer  = g:cake.buffer().type
-    else
+    let buffer  = string(g:cake.buffer())
+  else
     let app     = ''
     let core    = ''
     let cakephp = ''
@@ -34,9 +34,12 @@ endfunction "}}}
 function! cake#version() "{{{
   let cakephp_version = 'unknown'
   try
-    let php_code = 'echo trim(array_pop(file("' . g:cake.paths.cores.core . 'VERSION.txt")));'
-    let cmd = 'php -r ''' . php_code . ''''
-    let cakephp_version = system(cmd)
+    let path = findfile('VERSION.txt', g:cake.paths.cores.core . '/**1',)
+    if strlen(path) > 0
+      let php_code = 'echo trim(array_pop(file("' . path . '")));'
+      let cmd = 'php -r ''' . php_code . ''''
+      let cakephp_version = system(cmd)
+    endif
   catch
   endtry
   return cakephp_version
@@ -114,23 +117,31 @@ function! cake#init_buffer() "{{{
   endif
   " Cut an element partially. Argument is element name(,theme name).
   command! -n=1 -bang -buffer -bar -range Celement :<line1>,<line2>call g:cake.clip_element(<bang>0,<f-args>)
+
+  silent doautocmd User PluginCakephpInitializeAfter
 endfunction "}}}
 function! cake#map_commands() "{{{
-  nnoremap <buffer> <silent> <Plug>CakeJump       :<C-u>call g:cake.smart_jump('n')<CR>
-  nnoremap <buffer> <silent> <Plug>CakeSplitJump  :<C-u>call g:cake.smart_jump('s')<CR>
-  nnoremap <buffer> <silent> <Plug>CakeVSplitJump :<C-u>call g:cake.smart_jump('v')<CR>
-  nnoremap <buffer> <silent> <Plug>CakeTabJump    :<C-u>call g:cake.smart_jump('t')<CR>
-  if !hasmapto('<Plug>CakeJump')
-    nmap <buffer> gf <Plug>CakeJump
-  endif
-  if !hasmapto('<Plug>CakeSplitJump')
-    nmap <buffer> <C-w>f <Plug>CakeSplitJump
-  endif
-  if !hasmapto('<Plug>CakeVSplitJump')
-    exe 'nmap <buffer> ' . g:cakephp_keybind_vsplit_gf . ' <Plug>CakeVSplitJump'
-  endif
-  if !hasmapto('<Plug>CakeTabJump')
-    nmap <buffer> <C-w>gf <Plug>CakeTabJump
+  if !empty(g:cake) && cake#util#in_array(&filetype, ['php', 'ctp', 'htmlcake'])
+    nnoremap <buffer> <silent> <Plug>CakeJump       :<C-u>call g:cake.smart_jump('n')<CR>
+    nnoremap <buffer> <silent> <Plug>CakeSplitJump  :<C-u>call g:cake.smart_jump('s')<CR>
+    nnoremap <buffer> <silent> <Plug>CakeVSplitJump :<C-u>call g:cake.smart_jump('v')<CR>
+    nnoremap <buffer> <silent> <Plug>CakeTabJump    :<C-u>call g:cake.smart_jump('t')<CR>
+
+    if !g:cakephp_no_default_keymappings
+      if !hasmapto('<Plug>CakeJump')
+        nmap <buffer> gf <Plug>CakeJump
+      endif
+      if !hasmapto('<Plug>CakeSplitJump')
+        nmap <buffer> <C-w>f <Plug>CakeSplitJump
+      endif
+      if !hasmapto('<Plug>CakeVSplitJump')
+        exe 'nmap <buffer> ' . g:cakephp_keybind_vsplit_gf . ' <Plug>CakeVSplitJump'
+      endif
+      if !hasmapto('<Plug>CakeTabJump')
+        nmap <buffer> <C-w>gf <Plug>CakeTabJump
+      endif
+    endif
+
   endif
 endfunction "}}}
 function! cake#set_abbreviations() "{{{
@@ -177,6 +188,14 @@ function! cake#get_complelist(dict,ArgLead) "{{{
   let list = sort(keys(a:dict))
   return filter(list, 'v:val =~ "^'. fnameescape(a:ArgLead) . '"')
 endfunction "}}}
+function! cake#get_complelist_core(ArgLead, CmdLine, CursorPos) "{{{
+  try
+    let list = cake#get_complelist(g:cake.get_cores(), a:ArgLead)
+    return list
+  catch
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
 function! cake#get_complelist_lib(ArgLead, CmdLine, CursorPos) "{{{
   try
     let list = cake#get_complelist(g:cake.get_libs(), a:ArgLead)
@@ -379,6 +398,14 @@ function! cake#get_complelist_bake(ArgLead, CmdLine, CursorPos) "{{{
     call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
   endtry
 endfunction " }}}
+function! cake#get_complelist_testmethod(ArgLead, CmdLine, CursorPos) "{{{
+  try
+    let list = cake#get_complelist(g:cake.get_testmethods(expand("%:p")), a:ArgLead)
+    return list
+  catch
+    call cake#util#warning("[cake.vim] An application directory is not set. Please :Cakephp {app}.")
+  endtry
+endfunction " }}}
 " ============================================================
 
 
@@ -390,7 +417,7 @@ function! cake#factory(path_app)
 
   " Functions: abstract methods.(These implement it in a subclass.) {{{
   " ============================================================
-  function! self.get_libs()
+  function! self.get_cores()
   endfunction
   function! self.get_controllers()
   endfunction
@@ -485,6 +512,8 @@ function! cake#factory(path_app)
   endfunction
   function! self.is_task(path)
   endfunction
+  function! self.is_lib(path)
+  endfunction
 
   " }}}
   function! self.name_to_path_config(name) "{{{
@@ -498,44 +527,61 @@ function! cake#factory(path_app)
     if self.is_controller(path)
       let buffer.type = 'controller'
       let buffer.name = self.path_to_name_controller(path)
+      let buffer.full_name = self.path_to_name_controller(path, 1)
     elseif self.is_model(path)
       let buffer.type = 'model'
       let buffer.name = self.path_to_name_model(path)
+      let buffer.full_name = self.path_to_name_model(path, 1)
     elseif self.is_view(path)
       let buffer.type = 'view'
     elseif self.is_component(path)
       let buffer.type = 'component'
       let buffer.name = self.path_to_name_component(path)
+      let buffer.full_name = self.path_to_name_component(path, 1)
     elseif self.is_behavior(path)
       let buffer.type = 'behavior'
       let buffer.name = self.path_to_name_behavior(path)
+      let buffer.full_name = self.path_to_name_behavior(path, 1)
     elseif self.is_helper(path)
       let buffer.type = 'helper'
       let buffer.name = self.path_to_name_helper(path)
+      let buffer.full_name = self.path_to_name_helper(path, 1)
     elseif self.is_testcontroller(path)
       let buffer.type = 'testcontroller'
-      let buffer.name = self.path_to_name_testhelper(path)
+      let buffer.name = self.path_to_name_testcontroller(path)
+      let buffer.full_name = self.path_to_name_testcontroller(path, 1)
     elseif self.is_testmodel(path)
       let buffer.type = 'testmodel'
       let buffer.name = self.path_to_name_testmodel(path)
+      let buffer.full_name = self.path_to_name_testmodel(path, 1)
     elseif self.is_testcomponent(path)
       let buffer.type = 'testcomponent'
       let buffer.name = self.path_to_name_testcomponent(path)
+      let buffer.full_name = self.path_to_name_testcomponent(path, 1)
     elseif self.is_testbehavior(path)
       let buffer.type = 'testbehavior'
       let buffer.name = self.path_to_name_testbehavior(path)
+      let buffer.full_name = self.path_to_name_testbehavior(path, 1)
     elseif self.is_testhelper(path)
       let buffer.type = 'testhelper'
       let buffer.name = self.path_to_name_testhelper(path)
+      let buffer.full_name = self.path_to_name_testhelper(path, 1)
     elseif self.is_fixture(path)
       let buffer.type = 'fixture'
       let buffer.name = self.path_to_name_fixture(path)
+      let buffer.full_name = self.path_to_name_fixture(path, 1)
     elseif self.is_shell(path)
       let buffer.type = 'shell'
       let buffer.name = self.path_to_name_shell(path)
+      let buffer.full_name = self.path_to_name_shell(path, 1)
     elseif self.is_task(path)
       let buffer.type = 'task'
       let buffer.name = self.path_to_name_task(path)
+      let buffer.full_name = self.path_to_name_task(path, 1)
+    elseif self.is_lib(path)
+      let buffer.type = 'lib'
+      let buffer.name = cake#util#camelize(fnamemodify(path, ':t:r'))
+      let buffer.full_name = buffer.name
     else
       let buffer.type = ''
     endif
@@ -544,7 +590,7 @@ function! cake#factory(path_app)
     return buffer
   endfunction "}}}
 
-  " Functions: get_dictionary()
+  " Functions: get_dict
   " [object_name : path]
   " ============================================================
   function! self.get_behaviors(...) "{{{
@@ -716,6 +762,45 @@ function! cake#factory(path_app)
     return configs
 
   endfunction "}}}
+  function! self.get_libs() "{{{
+    let libs = {}
+
+    if isdirectory(self.paths.libs)
+      for path in split(globpath(self.paths.libs, "**.php"), "\n")
+        let name = cake#util#camelize(fnamemodify(path, ':t:r'))
+        let libs[name] = path
+      endfor
+    endif
+
+    return libs
+  endfunction
+  " }}}
+  function! self.get_testmethods(path) "{{{
+
+    " key = func_name, val = line_number
+    let testmethods = {}
+
+    if !filereadable(a:path)
+      return testmethods
+    endif
+
+    " Extracting the function name.
+    let cmd = 'grep -nE "^\s*(public)?\s*function\s*test\w+\s*\(" ' . a:path
+    for line in split(system(cmd), "\n")
+
+      " cast int
+      let line_number = matchstr(line, '^\d\+') + 0
+
+      let s = matchend(line, "\s*function\s*.")
+      let e = match(line, "(")
+      let func_name = cake#util#strtrim(strpart(line, s, e-s))
+
+      let testmethods[func_name] = line_number
+    endfor
+
+    return testmethods
+
+  endfunction " }}}
   " ============================================================
 
   " Functions: jump_xxx()
@@ -1384,7 +1469,7 @@ function! cake#factory(path_app)
       if self.is_model(path)
         call add(targets, self.path_to_name_model(path))
       elseif self.is_testmodel(path)
-        call add(targets, self.path_to_name_test(path))
+        call add(targets, self.path_to_name_testmodel(path))
       else
         return
       endif
@@ -1410,6 +1495,22 @@ function! cake#factory(path_app)
 
   endfunction
   "}}}
+  function! self.jump_core(...) " {{{
+
+    let split_option = a:1
+    let targets = self.args_to_targets(a:000)
+    let cores = self.get_cores()
+
+    for target in targets
+      if !has_key(cores, target)
+        call cake#util#warning(target . " is not found.")
+      endif
+
+      let line = 0
+      call cake#util#open_file(cores[target], split_option, line)
+    endfor
+
+  endfunction "}}}
   function! self.jump_lib(...) " {{{
 
     let split_option = a:1
@@ -1432,7 +1533,7 @@ function! cake#factory(path_app)
     let line = getline('.')
     let word = expand('<cword>')
     let l_word = expand('<cWORD>')
-    let libs = {}
+    let cores = {}
 
     if cake#util#in_array('-', split(&iskeyword, ','))
       let word = substitute(word, "-*$", "", "")
@@ -1502,14 +1603,14 @@ function! cake#factory(path_app)
       endif
 
       " jump to Core Libraries
-      if len(libs) == 0
-        let libs = self.get_libs()
+      if len(cores) == 0
+        let cores = self.get_cores()
       endif
       let priority_order = ['', 'Behavior', 'Component', 'Helper']
       for suffix in priority_order
         let target = word . suffix
-        if has_key(libs, target)
-          call self.jump_lib(option, target)
+        if has_key(cores, target)
+          call self.jump_core(option, target)
           return
         endif
       endfor
@@ -1543,14 +1644,14 @@ function! cake#factory(path_app)
       endif
 
       " jump to Core Libraries
-      if len(libs) == 0
-        let libs = self.get_libs()
+      if len(cores) == 0
+        let cores = self.get_cores()
       endif
       let priority_order = ['', 'Behavior']
       for suffix in priority_order
         let target = word . suffix
-        if has_key(libs, target)
-          call self.jump_lib(option, target)
+        if has_key(cores, target)
+          call self.jump_core(option, target)
           return
         endif
       endfor
@@ -1604,14 +1705,14 @@ function! cake#factory(path_app)
       endif
 
       " jump to Core Libraries
-      if len(libs) == 0
-        let libs = self.get_libs()
+      if len(cores) == 0
+        let cores = self.get_cores()
       endif
       let priority_order = ['', 'Helper', 'Component', 'Behavior']
       for suffix in priority_order
         let target = word . suffix
-        if has_key(libs, target)
-          call self.jump_lib(option, target)
+        if has_key(cores, target)
+          call self.jump_core(option, target)
           return
         endif
       endfor
@@ -1637,14 +1738,14 @@ function! cake#factory(path_app)
       endif
 
       " jump to Core Libraries
-      if len(libs) == 0
-        let libs = self.get_libs()
+      if len(cores) == 0
+        let cores = self.get_cores()
       endif
       let priority_order = ['', 'Behavior', 'Component']
       for suffix in priority_order
         let target = word . suffix
-        if has_key(libs, target)
-          call self.jump_lib(option, target)
+        if has_key(cores, target)
+          call self.jump_core(option, target)
           return
         endif
       endfor
@@ -1664,14 +1765,14 @@ function! cake#factory(path_app)
       endif
 
       " jump to Core Libraries
-      if len(libs) == 0
-        let libs = self.get_libs()
+      if len(cores) == 0
+        let cores = self.get_cores()
       endif
       let priority_order = ['', 'Behavior']
       for suffix in priority_order
         let target = word . suffix
-        if has_key(libs, target)
-          call self.jump_lib(option, target)
+        if has_key(cores, target)
+          call self.jump_core(option, target)
           return
         endif
       endfor
@@ -1691,14 +1792,14 @@ function! cake#factory(path_app)
       endif
 
       " jump to Core Libraries
-      if len(libs) == 0
-        let libs = self.get_libs()
+      if len(cores) == 0
+        let cores = self.get_cores()
       endif
       let priority_order = ['', 'Helper']
       for suffix in priority_order
         let target = word . suffix
-        if has_key(libs, target)
-          call self.jump_lib(option, target)
+        if has_key(cores, target)
+          call self.jump_core(option, target)
           return
         endif
       endfor
@@ -1798,15 +1899,15 @@ function! cake#factory(path_app)
       endif
 
       " jump to Core Libraries
-      if len(libs) == 0
-        let libs = self.get_libs()
+      if len(cores) == 0
+        let cores = self.get_cores()
       endif
 
       let priority_order = ['Task', '', 'Behavior', 'Component', 'Helper']
       for suffix in priority_order
         let target = word . suffix
-        if has_key(libs, target)
-          call self.jump_lib(option, target)
+        if has_key(cores, target)
+          call self.jump_core(option, target)
           return
         endif
       endfor
@@ -1823,20 +1924,33 @@ function! cake#factory(path_app)
       endif
 
       " jump to Core Libraries
-      if len(libs) == 0
-        let libs = self.get_libs()
+      if len(cores) == 0
+        let cores = self.get_cores()
       endif
       let priority_order = ['', 'Behavior', 'Component', 'Helper']
       for suffix in priority_order
         let target = word . suffix
-        if has_key(libs, target)
-          call self.jump_lib(option, target)
+        if has_key(cores, target)
+          call self.jump_core(option, target)
           return
         endif
       endfor
 
     endif
     "}}}
+    " in Lib "{{{
+    if self.is_lib(path)
+
+      " Lib -> Model
+      if self.is_model(self.name_to_path_model(word)) || self.in_build_path_model(word)
+        call self.jump_model(option, word)
+        return
+      endif
+
+    endif
+    "}}}
+
+
 
     " Global {{{
     " Configure::load('xxx'); -> config
@@ -1846,19 +1960,22 @@ function! cake#factory(path_app)
       return
     endif
 
-    " jump to Core Libraries
     if strlen(word) > 0
+      " jump to 1st party Libraries
       if has_key(self.get_libs(), word)
         call self.jump_lib(option, word)
+        return
+      endif
+      " jump to Core Libraries
+      if has_key(self.get_cores(), word)
+        call self.jump_core(option, word)
         return
       endif
     endif
     " }}}
 
-
-
     " Combination Pattern (I lowered priority most. Because it might conflict with other patterns.)
-    
+
     " array('controller' => 'Hoge', 'action' => 'fuga') ->  HogeController::fuga()
     " array('controller' => 'Hoge', 'action' => 'fuga', 'admin' => true) -> HogeController::admin_fuga()
     let controller_name = matchstr(line, '\(array(.*["'']controller["'']\s*=>\s*["'']\)\zs\w\+\ze\(["''].*)\)')
@@ -2125,14 +2242,19 @@ function! cake#factory(path_app)
   endfunction "}}}
   function! self.gf(option) "{{{
     if a:option == 'n'
-      exec "normal! gf"
+      execute g:cakephp_gf_fallback_n
     elseif a:option == 's'
-      exec "normal! \<C-w>f"
+      execute g:cakephp_gf_fallback_s
     elseif a:option == 't'
-      exec "normal! \<C-w>gf"
+      execute g:cakephp_gf_fallback_t
     endif
   endfunction "}}}
   " ============================================================
+
+  function! self.normal(key) "{{{
+    let op = stridx(a:key, "\<Plug>") != -1 ? "normal" : "normal!"
+    execute op a:key
+  endfunction "}}}
 
   " Functions: dbext.vim interface
   " ============================================================
@@ -2240,7 +2362,7 @@ function! cake#factory(path_app)
 
     let models  = self.get_models()
     let helpers = self.get_helpers()
-    let libs    = self.get_libs()
+    let cores   = self.get_cores()
 
     let _pre = ''
     let _src = ''
@@ -2267,7 +2389,7 @@ function! cake#factory(path_app)
         let object = matchstr(line, '\(\$this->\)\zs\u\a\+\ze')
         if strlen(object)
           " Helper?
-          if has_key(helpers, object . 'Helper') || has_key(libs, object . 'Helper')
+          if has_key(helpers, object . 'Helper') || has_key(cores, object . 'Helper')
             let _pre = _pre . 'App::import("Helper", "' . object . '"); $' . object . ' = new ' . object . 'Helper(); '
             " replace
             let line = substitute(line, '$this->' . object, '$' . object, "")
@@ -2504,81 +2626,101 @@ function! cake#factory(path_app)
     let cmd  = printf('%scake bake %s -app %s', self.paths.cores.console, join(a:000, ' '), self.paths.app)
     execute ':!' .cmd
   endfunction "}}}
-  function! self.test(path) "{{{
-    let buffer = self.buffer(a:path)
+  function! self.run_test(...) "{{{
 
-    let test_path = ''
-    if cake#util#in_array(buffer.type, ['model', 'fixture', 'controller', 'component', 'behavior', 'helper'])
-      let Fn_get_path = get(self, 'name_to_path_test' . buffer.type)
-      let test_path = call(Fn_get_path, [buffer.name], self)
-      let Fn_get_name = get(self, 'path_to_name_test' . buffer.type)
-      let test_name = call(Fn_get_name, [test_path], self)
-    else
-      let test_path = a:path
-      let test_name = self.buffer(test_path).name
+    let Fnction = get(self, 'build_test_command')
+    let test_command = call(Fnction, a:000, self)
+
+    let cmd = {}
+    if type(test_command) == type("")
+      let cmd.external = test_command
+      let cmd.async = test_command
+    elseif type(test_command) == type({})
+      let cmd.external = test_command.external
+      let cmd.async = test_command.async
     endif
 
-    if !filereadable(test_path)
+    if !strlen(cmd.external) && !strlen(cmd.async)
       return 0
     endif
 
-    let test_command = ''
+    " async execute
+    if exists("g:loaded_vimproc") && strlen(cmd.async) > 0
 
-    " app case
-    if finddir(self.paths.testcases, escape(test_path, ' \') . ';') == self.paths.testcases
+      call cake#util#system_async(cmd.async, s:func_ref('open_test_result', s:__sid()))
+      echo '[cake.vim] Run in background : ' . cmd.async
 
-      let dir = cake#util#get_topdir(substitute(test_path, self.paths.testcases, '', ''))
-
-      let cakephp_version = cake#version()
-      if cakephp_version < 1.4
-        let test_command = 'testsuite app case ' . dir . '/' . test_name
-      elseif cakephp_version < 2.1
-        let test_command = 'testsuite app ' . dir . '/' . test_name
-      elseif cakephp_version >= 2.1
-        let test_command = 'test app ' . dir . '/' . test_name
-      endif
-
-    endif
-
-    if !strlen(test_command)
-      return 0
-    endif
-
-    let cmd  = printf('%scake %s -app %s', self.paths.cores.console, test_command, self.paths.app)
-    echo cmd
-
-    if exists("g:loaded_vimproc")
-      let sub = vimproc#popen2(cmd)
-      let res = ''
-      while !sub.stdout.eof
-        let res .= sub.stdout.read()
-      endwhile
-      let [cond, status] = sub.waitpid()
-      new
-      silent resize  10
-      setlocal buftype=nofile
-      setlocal bufhidden=hide
-      setlocal noswapfile
-      setlocal noreadonly
-      nnoremap <buffer> <silent> q :bdelete<CR>
-      call append(0, split(res, '\r\n\|\r\|\n') + [string([cond, status])])
-      " let r = vimproc#system_bg(cmd)
-      " let r = vimproc#get_last_status()
-      echo 'Press "q" to close buffer.'
     else
-      let res = system(cmd)
-      echo res
+      execute ':!' .cmd.external
     endif
 
     return 1
 
   endfunction "}}}
+  function! self.run_current_testmethod() " {{{
+    let buffer = self.buffer()
+
+    if matchstr(buffer.type, '^test') == ''
+      return
+    endif
+
+    let neighbor_line = 0
+    let func_line = self.get_testmethods(buffer.path)
+    let current_line = line(".")
+    for l in cake#util#nrsort(values(func_line))
+      if l <= current_line
+        let neighbor_line = l
+        break
+      endif
+    endfor
+
+    if neighbor_line == 0
+      return
+    endif
+
+    let testmethod = ''
+    for [f, l] in items(func_line)
+      if l == neighbor_line
+        let testmethod = f
+        break
+      endif
+    endfor
+
+    call self.run_test(buffer.path, testmethod)
+
+  endfunction " }}}
   " ============================================================
 
   return self
 endfunction
 " ============================================================
 
+function! s:open_test_result(result) "{{{
+  if g:cakephp_test_window_vertical
+    vnew
+    exec 'silent vertical resize' . g:cakephp_test_window_width
+  else
+    new
+    exec 'silent resize ' . g:cakephp_test_window_height
+  endif
+
+  setlocal buftype=nofile
+  setlocal bufhidden=hide
+  setlocal noswapfile
+  setlocal noreadonly
+  setlocal noautoindent
+  nnoremap <buffer> <silent> q :bdelete<CR>
+  echo 'Press "q" to close buffer.'
+
+  call append(line('$'), split(a:result, '\r\n\|\r\|\n'))
+  call cursor(line('$'), 0)
+endfunction "}}}
+function! s:__sid() " {{{
+  return matchstr(expand('<sfile>'), '<SNR>\zs\d\+\ze___sid$')
+endfunction "}}}
+function! s:func_ref(function_name, sid) " {{{
+    return function(printf('<SNR>%d_%s', a:sid, a:function_name))
+endfunction "}}}
 
 
 let &cpo = s:save_cpo
